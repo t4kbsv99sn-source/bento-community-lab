@@ -23,8 +23,8 @@ replacing the bootloader or pretending to have the manufacturer's source.
 | Select toggle | Intended button beside Undo for selecting several steps without toggling notes. | Implemented and software-tested; currently reported missing on the device. Do not claim usable. |
 | Chord/progression insertion | CH1 adds a native editor for chord types, voicings, strum, key/scale and progression presets; Insert makes ordinary notes. | Cut repetitive piano-roll entry. Its Chord button is currently missing on hardware, so this remains a development/review target. |
 
-Top row is pads 1–8; bottom row is9–16, both left to right. PROJ acts as Shift;
-PROJ + PLAY reaches the project-related views. Hold-based performance views
+Top row is pads 1–8; bottom row is9–16, both left to right. **PROJ acts as Shift**;
+the project pages it used to open are on **PROJ + PLAY**. Hold-based performance views
 return to the previous screen on release; TRACKS shortcuts deliberately stay on
 the destination instrument/sequencer page.
 

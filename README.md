@@ -18,8 +18,13 @@ Bento Lab is an evolving project. Features are being actively explored, implemen
 
 Some modifications may already be functional, while others remain experimental or under development. Stability and compatibility are not guaranteed.
 
+> **Heads-up: the PROJ button works differently.** PROJ is now a Shift button for the new
+> features (for example, PROJ + a step clears that step's parameter locks). The project
+> pages it used to open are now under **PROJ + PLAY**. Nothing is gone, it has just moved.
+
 What's in there so far:
 
+- PROJ as a Shift button (project pages: PROJ + PLAY)
 - Hold TRACKS + a pad to jump straight to a track, launch/stop clips and mix from the pads
 - Hold a step to tweak it, trigger conditions and two parameter-lock encoders
 - Programmable Kick, Snare and Hi-hat synths

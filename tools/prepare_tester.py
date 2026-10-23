@@ -37,6 +37,8 @@ Current CH1 feedback: Chord and Select buttons are missing. EU10 predates Chord;
 its shared Select UI still needs confirmation after earlier missing-button reports.
 These issues are not fixed here. EU10 is not a certified stable release.
 
+PROJ NOW WORKS AS SHIFT: the project pages it used to open are on PROJ + PLAY.
+
 1. Back up your card/projects and keep your original firmware download.
 2. Copy BOTH files inside 01_TEST_FIRMWARE to the microSD top level.
 3. If needed, copy the three files in 02_SD_CONTENT/Projects into your existing
