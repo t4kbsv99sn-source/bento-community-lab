@@ -13,3 +13,8 @@ int live_position(Euclid*,u32*);
 int live_generate(Euclid*,u32,int);
 
 int live_dynamic(Euclid*,u32,int);
+
+int live_row_pitch(Euclid*,u32,u32*);
+int live_pitch_owner(Euclid*,u32,u32);
+int live_assign_pitch(Euclid*,u32);
+int live_set_gate(Euclid*,u32);

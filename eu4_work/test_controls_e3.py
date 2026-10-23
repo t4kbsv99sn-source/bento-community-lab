@@ -63,6 +63,10 @@ class Seq(SynthUI):
  def arrow(self,id):
   event=0x20028000;self.w(event,0x73);self.w(event+8,id);self.call(UU['seq_eu_arrows'],self.view,event)
  def bank(self):self.call(UU['seq_eu_active'],self.view);return self.u.reg_read(UC_ARM_REG_R0)
+ # CH5: the Euclid bank is the Euclidean view tab (header id 1055); arrows are native.
+ def tab(self):self.call(UU['seq_eu_tab'],self.view)
+ def leave(self):self.call(UU['seq_eu_leave'],self.view)
+ def arrow_result(self,id):self.arrow(id);return self.u.reg_read(UC_ARM_REG_R0)
 class Tests(unittest.TestCase):
  def test_native_ui_allocator_c6_pool_reaches_euclidean_from_actual_event_entry(self):
   p=Seq();p.u.mem_map(0xc6000000,0x20000)
@@ -71,24 +75,28 @@ class Tests(unittest.TestCase):
   original=p.newhook
   # Registered hook is bound, so suppress via its explicit flag below.
   p.native_allocator=True
-  event=0x20028000;p.w(event,0xae);p.w(event+8,9)
-  p.call(0x0815d4b4,p.view,event)
+  event=0x20028000;p.w(event,0x1055) # Euclidean tab through the patched native SEQ action dispatcher
+  p.call(0x0815d600,p.view,event)
   self.assertEqual(p.bank(),1);self.assertEqual(p.word(0x24041fc4),0xc6000000)
-  self.assertEqual(p.word(0x3000004c),0xc6000000+44064)
+  self.assertEqual(p.word(0x3000004c),0xc6000000+46080) # CH3 +16 runtime pitch lines; CH6 +1344 chord audition; CH8 +160 velocity
 
- def test_right_left_switch_only_encoder_bank_and_keep_native_step_sequence_flag(self):
+ def test_euclidean_tab_switches_only_encoder_bank_and_keeps_native_step_sequence_flag(self):
   for flag in [0,1]:
-   p=Seq();p.u.mem_write(p.view+0x113e0,bytes([flag]));p.arrow(9);self.assertEqual(p.bank(),1)
+   p=Seq();p.u.mem_write(p.view+0x113e0,bytes([flag]));p.tab();self.assertEqual(p.bank(),1)
    self.assertEqual(p.u.mem_read(p.page+0x12c,1),b'\x27');self.assertEqual(p.u.mem_read(p.view+0x113e0,1),bytes([flag]))
-   p.arrow(0);self.assertEqual(p.bank(),0);self.assertEqual(p.u.mem_read(p.view+0x113e0,1),bytes([flag]))
- def test_up_down_use_previous_next_native_sequence_actions(self):
-  p=Seq();p.arrow(1);p.arrow(8);self.assertEqual(p.arrows,[0xffffffff,1])
+   p.leave();self.assertEqual(p.bank(),0);self.assertEqual(p.u.mem_read(p.view+0x113e0,1),bytes([flag]))
+ def test_all_arrows_stay_native_in_both_banks(self):
+  # CH5 owner: Left/Right always previous/next event; Up/Down native.
+  for bank in [0,1]:
+   p=Seq()
+   if bank:p.tab()
+   self.assertEqual([p.arrow_result(i) for i in [0,1,8,9]],[0,0,0,0]);self.assertEqual(p.bank(),bank)
  def test_normal_step_locks_moved_to_encoders_seven_eight(self):
   p=Seq();p.prepare();self.assertEqual(struct.unpack('<4H',p.u.mem_read(0x300000c4,8)),(0,0,2,0x32))
   p.display();bar=p.view+0xebf0
   self.assertEqual(struct.unpack('<2H',p.u.mem_read(p.view+0x113b8,4)),(2,0x32))
  def test_euclidean_bar_has_six_controls_and_locks_seven_eight(self):
-  p=Seq();p.arrow(9);p.prepare();p.call(U_SYMS['locks_header_after'],p.view)
+  p=Seq();p.tab();p.prepare();p.call(U_SYMS['locks_header_after'],p.view)
   self.assertEqual(struct.unpack('<8H',p.u.mem_read(p.view+0x113ac,16)),(0x190,0x191,0x192,0x193,0x194,0x195,2,0x32))
   p.encoder(0x191,7);p.encoder(0x192,3);p.call(U_SYMS['locks_header_after'],p.view)
   self.assertEqual(p.word(p.view+0x113c0),7);self.assertEqual(p.word(p.view+0x113c4),3)
@@ -115,13 +123,14 @@ class Tests(unittest.TestCase):
   p=Seq()
   for code,tick in [(0xaf,1000),(0xb0,1050),(0xaf,1200)]:
    p.w(0x3001fe2c,tick);p.call(UU['fx_dispatch'],p.page,code,0,11);self.assertEqual(p.u.reg_read(UC_ARM_REG_R0),0)
- def test_patched_arrow_site_reaches_adapter_and_returns_without_navigation(self):
+ def test_patched_arrow_site_hands_right_to_native_next_event(self):
   p=Seq();event=0x20028000;p.w(event,0x73);p.w(event+8,9);sp=0x2003e000
   p.u.reg_write(UC_ARM_REG_R0,p.view);p.u.reg_write(UC_ARM_REG_R1,event);p.u.reg_write(UC_ARM_REG_SP,sp)
-  p.u.emu_start(0x0815d57f,0x0815d520,count=1000000);self.assertEqual(p.u.reg_read(UC_ARM_REG_PC),0x0815d520);self.assertEqual(p.bank(),1)
+  p.u.emu_start(0x0815d57f,0x0815d520,count=1000000);self.assertEqual(p.u.reg_read(UC_ARM_REG_PC),0x0815d520);self.assertEqual(p.bank(),0)
+  self.assertEqual(p.arrows,[1])
  def test_proj_left_returns_selected_pad_to_manual_without_erasing_notes(self):
-  p=Seq();before=bytes(p.u.mem_read(p.container,72));p.arrow(9);p.w(0x24048d68,1);p.arrow(0)
-  self.assertEqual(p.bank(),0);self.assertEqual(bytes(p.u.mem_read(p.container,72)),before)
+  p=Seq();before=bytes(p.u.mem_read(p.container,72));p.tab();p.w(0x24048d68,1);self.assertEqual(p.arrow_result(0),1)
+  self.assertEqual(bytes(p.u.mem_read(p.container,72)),before) # Shift+Left stops generating, notes kept
  def test_actual_native_widgets_clear_kick_values_on_snare_switch(self):
   p=NativeWidgetUI();p.u.reg_write(UC_ARM_REG_R0,0);p.u.reg_write(UC_ARM_REG_SP,0x20030000);p.u.reg_write(UC_ARM_REG_LR,0x081ff201)
   p.u.emu_start(0x081639a9,0x081ff200,count=200000)

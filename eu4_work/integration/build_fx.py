@@ -3,7 +3,7 @@ from pathlib import Path
 import struct,sys,subprocess,hashlib,json
 from keystone import Ks,KS_ARCH_ARM,KS_MODE_THUMB
 R=Path(__file__).resolve().parent
-BASE=0x08040000;AUDIO=0x080dc800;UI=0x081c0800
+BASE=0x08040000;AUDIO=0x080dc400;UI=0x081c0800
 K16_SHA='5e72971b31388201454a71b0be7cc61ad40915bda3a75e635d104dd89346a03d'
 def elf(path):
  b=path.read_bytes();off=struct.unpack_from('<I',b,32)[0];step,n=struct.unpack_from('<HH',b,46);ss=[struct.unpack_from('<10I',b,off+i*step) for i in range(n)];chunks=[];syms={}
@@ -24,10 +24,12 @@ def compile():
  common=[sys.executable,'-m','ziglang','c++','-target','thumb-freestanding-eabihf','-mcpu=cortex_m7+fp_armv8d16sp+fpregs+fpregs16+vfp4d16sp','-mfloat-abi=hard','-mfpu=fpv5-sp-d16','-std=c++17','-Os','-flto','-g','-ffreestanding','-fno-builtin','-fno-exceptions','-fno-rtti','-fno-stack-protector','-nostdlib','-nostdlib++','-I'+str(t/'arm_support'),'-I'+str(v),'-I'+str(v/'Utility')]
  sources=[R/'fx_audio.cpp',R/'live_audio.cpp',t/'track_fx.cpp',v/'Source/Dynamics/compressor.cpp',v/'Source/Filters/biquad.cpp',t/'arm_support/math_runtime.cpp']
  subprocess.run([*common,'-Wl,--entry=fx_audio','-Wl,--script='+str(R/'audio.ld'),*map(str,sources),'-o',str(R/'audio.elf')],check=True)
- subprocess.run([sys.executable,'-m','ziglang','cc','-target','thumb-freestanding-eabi','-mcpu=cortex_m4','-mfloat-abi=soft','-Oz','-g','-ffreestanding','-fno-builtin','-fno-stack-protector','-nostdlib','-Wl,--entry=fx_dispatch','-Wl,--script='+str(R/'ui.ld'),str(R/'fx_ui.c'),str(R/'euclidean.c'),str(R/'live_ui.c'),str(R/'step_lock_ui.c'),str(R/'kick_ui.c'),*[str(R.parents[1]/'chord_work'/n) for n in ['chords.c','native_insert.c','device.c']],'-o',str(R/'ui.elf')],check=True)
+ subprocess.run([sys.executable,'-m','ziglang','cc','-target','thumb-freestanding-eabi','-mcpu=cortex_m4','-mfloat-abi=soft','-Oz','-g','-ffreestanding','-fno-builtin','-fno-stack-protector','-nostdlib','-Wl,--entry=fx_dispatch','-Wl,--script='+str(R/'ui.ld'),str(R/'fx_ui.c'),str(R/'euclidean.c'),str(R/'live_ui.c'),str(R/'step_lock_ui.c'),str(R/'header_actions.c'),str(R/'melodic_eu.c'),str(R/'lanes_ui.c'),str(R/'bars_ui.c'),str(R/'kick_ui.c'),*[str(R.parents[1]/'chord_work'/n) for n in ['chords.c','native_insert.c','device.c']],'-o',str(R/'ui.elf')],check=True)
  ac,aa=elf(R/'audio.elf');uc,uu=elf(R/'ui.elf')
  assert len(ac)==len(uc)==1 and ac[0][0]==AUDIO and uc[0][0]==UI
- assert AUDIO+len(ac[0][1])<=0x080e0000 and UI+len(uc[0][1])<=0x081cc000
+ # CH7: UI bound 081D0000 (was 081CC000, a margin). Stock M4 MPU region 1 makes
+ # 08100000..081FFFFF executable; code stays in the 128 KB sector 081C0000 it already uses.
+ assert AUDIO+len(ac[0][1])<=0x080e0000 and UI+len(uc[0][1])<=0x081d0000
  return ac[0][1],aa,uc[0][1],uu
 def build(base):
  if hashlib.sha256(base).hexdigest()!=K16_SHA:raise ValueError('Expected exact K16 base')
@@ -60,7 +62,7 @@ def build(base):
  put(0x080404b6,asm('b.w '+hex(a),0x080404b6),'Initialize new M7-owned FX memory, then original K16 startup')
  a=ab(prefix+'sub sp,#8; ldr r0,[sp,#136]; str r0,[sp]; ldr r0,[sp,#80]; ldr r1,[sp,#84]; ldr r2,[sp,#88]; ldr r3,[sp,#92]; bl '+hex(aa['live_render'])+'; add sp,#8; '+restore+'push.w {r4-r11,lr}; b.w 0x08060824')
  put(0x08060820,asm('b.w '+hex(a),0x08060820),'EU10 native timed-note renderer entry')
- a=ab(prefix+'mov r0,r8; ldrh.w r1,[sp,#170]; bl '+hex(aa['live_skip'])+'; cmp r0,#0; beq old; '+restore+'b.w 0x080609e2; old: '+restore+'b.w 0x080d2000')
+ a=ab(prefix+'mov r0,r8; ldrh.w r1,[sp,#170]; ldrh.w r2,[sp,#184]; bl '+hex(aa['live_skip'])+'; cmp r0,#0; beq old; '+restore+'b.w 0x080609e2; old: '+restore+'b.w 0x080d2000')
  put(0x08060b64,asm('b.w '+hex(a),0x08060b64),'EU10 suppress only native hits for generator-controlled pads; chain conditions')
  a=ab(prefix+'ldr r0,[sp,#72]; bl '+hex(aa['live_restart'])+'; '+restore+'b.w 0x080d2100')
  put(0x08061740,asm('b.w '+hex(a),0x08061740),'EU10 restart on launches, preserve phase on normal loop; chain condition counter')
@@ -69,8 +71,25 @@ def build(base):
  old_native=0x080d3000
  a=ab(prefix+'mov r0,r8; ldr r1,[sp,#188]; bl '+hex(aa['locks_native_filter'])+'; str r0,[sp,#188]; '+restore+'b.w '+hex(old_native))
  put(0x08060b9a,asm('b.w '+hex(a),0x08060b9a),'EU10 conditional lock payload on accepted native hits')
- assert len(aw)<=0x800
- payload=bytes(aw)+bytes(0x800-len(aw))+ac
+ # CH9 (owner): the per-track meter measured the raw track signal plus the fader
+ # level (080A0566 reads r6, 080A055C/05C0/05E0 load the level offset), so Track
+ # FX (clipper/compressor/EQ) never showed. Measure r4 instead: after Level and
+ # Track FX (the TF2 hook at 080A0510), before pan/sends; no offset.
+ for site_a,old,new,why in [(0x080a055c,'95ed1c8a0023','movs r3,#0; vmov s16,r3','meter offset 0 (post-level buffer)'),
+                            (0x080a0566,'3046','mov r0,r4','meter the post-level, post-Track-FX buffer'),
+                            (0x080a05c0,'95ed0a8a','b 0x080a055c; nop','other track type: same zero offset'),
+                            (0x080a05e0,'95ed108a','b 0x080a055c; nop','other track type: same zero offset')]:
+  assert base[site_a-BASE:site_a-BASE+len(old)//2].hex()==old,hex(site_a)
+  mb=asm(new,site_a);assert len(mb)==len(old)//2,(hex(site_a),len(mb));put(site_a,mb,'CH9 meter after Track FX: '+why)
+ # CH6 chord pad audition: the native keyboard-pad press/release posts in the
+ # pad module (08084760 press, 08083FE0 release) call chord_press/chord_release,
+ # which post the whole chord while M4 chord mode is active, else the original.
+ for site_a,fn,args,why in [(0x08084918,'chord_press','mov r2,r4; movs r3,#0','track press'),(0x0808494e,'chord_press','mov r2,r4; movs r3,#1','layer press'),(0x0808414a,'chord_release','movs r2,#0','track release'),(0x08084180,'chord_release','movs r2,#1','layer release')]:
+  assert base[site_a-BASE:site_a-BASE+4]==asm('bl 0x0809eca0',site_a),hex(site_a)
+  a=ab(args+'; b.w '+hex(aa[fn]))
+  put(site_a,asm('bl '+hex(a),site_a),'CH6 chord pad audition: '+why)
+ assert len(aw)<=AUDIO-0x080dc000 # CH6: adapters use <0x200; M7 code starts at 080DC400
+ payload=bytes(aw)+bytes(AUDIO-0x080dc000-len(aw))+ac
  assert base[0x080dc000-BASE:0x080dc000-BASE+len(payload)]==bytes(len(payload))
  put(0x080dc000,payload,'TF2 M7 code and exact-version adapters in zero application cave')
  uw=bytearray()
@@ -131,17 +150,21 @@ def build(base):
   site(address,'b.w '+hex(a),'EU10 selection gesture consumes native toggle path',6 if address==0x0815d444 else 4)
  # CH1 captures only the real pitched piano roll after its native header.
  replay=ub('push.w {r4-r11,lr}; b.w 0x081599c0')
- a=ub('push {r4,lr}; mov r4,r0; bl '+hex(replay)+'; mov r0,r4; bl '+hex(uu['chord_capture'])+'; pop {r4,pc}')
+ a=ub('push {r4,lr}; mov r4,r0; bl '+hex(replay)+'; mov r0,r4; bl '+hex(uu['piano_after_header'])+'; pop {r4,pc}')
  assert base[0x081599bc-BASE:0x081599c0-BASE]==bytes.fromhex('2de9f04f')
  site(0x081599bc,'b.w '+hex(a),'CH1 capture native pitched piano-roll context')
- a=ub(integer_prefix+'ldr r0,[sp,#8]; ldr r1,[sp,#12]; bl '+hex(uu['chord_piano_event'])+'; cmp r0,#0; beq old; '+integer_restore+'movs r0,#0; bx lr; old: '+integer_restore+'push {r4-r7,lr}; sub sp,#0x174; b.w 0x0815a59c')
+ a=ub(integer_prefix+'ldr r0,[sp,#8]; ldr r1,[sp,#12]; bl '+hex(uu['piano_event'])+'; cmp r0,#0; beq old; '+integer_restore+'movs r0,#0; bx lr; old: '+integer_restore+'push {r4-r7,lr}; sub sp,#0x174; b.w 0x0815a59c')
  assert base[0x0815a598-BASE:0x0815a59c-BASE]==bytes.fromhex('f0b5ddb0')
  site(0x0815a598,'b.w '+hex(a),'CH1 native Chord toolbar action; ordinary piano events fall through')
+ # CH5: piano hardware events (vtable slot 13): arrows walk chords in live chord mode.
+ a=ub(integer_prefix+'ldr r0,[sp,#8]; ldr r1,[sp,#12]; bl '+hex(uu['chord_live_hw'])+'; cmp r0,#0; beq old; '+integer_restore+'bx lr; old: '+integer_restore+'push {r4-r7,lr}; sub sp,#0x44; b.w 0x0815b54c')
+ assert base[0x0815b548-BASE:0x0815b54c-BASE]==bytes.fromhex('f0b591b0')
+ site(0x0815b548,'b.w '+hex(a),'CH5 live chord Left/Right; other piano hardware events stay native')
  # Native persistent header output; popup records alone do not populate it.
  replay=ub('push.w {r4-r10,lr}; b.w 0x08134804')
  a=ub('push {r4,r5,r6,lr}; mov r4,r0; mov r5,r1; bl '+hex(replay)+'; mov r2,r0; mov r0,r4; mov r1,r5; bl '+hex(uu['seq_toolbar'])+'; pop {r4,r5,r6,pc}')
  assert base[0x08134800-BASE:0x08134804-BASE]==bytes.fromhex('2de9f047')
- site(0x08134800,'b.w '+hex(a),'EU10 native persistent Select action beside Undo')
+ site(0x08134800,'b.w '+hex(a),'Persistent header custom actions (Select/Chord) with visibility sync')
  # FA has five equal native menu columns; fifth was unused. Insert Select
  # after Undo and shift Length+/Length-/Duplicate intact into cells3..5.
  menu=bytearray(base[0x08198db0-BASE:0x08198db0-BASE+100])
@@ -161,13 +184,18 @@ def build(base):
  a=ub('push {r4,r5,r6,lr}; mov r4,r0; mov r5,r1; bl 0x0816faec; mov r0,r4; mov r1,r5; bl '+hex(uu['eu_glyph_paint'])+'; pop {r4,r5,r6,pc}')
  assert base[0x0819e858-BASE:0x0819e858-BASE+4]==struct.pack('<I',0x0816faed)
  put(0x0819e858,struct.pack('<I',a|1),'EU10 sequencer-only velocity glyph after native child drawing')
+ # CH6 Euclidean lanes in the piano roll: the piano grid class (vtable 081B2BCC)
+ # paints and ticks through lane_paint/lane_tick, which call the originals.
+ for slot,old_fn,fn in [(0,0x081773a5,'lane_tick'),(1,0x08176d75,'lane_paint')]:
+  a=0x081b2bcc+slot*4;assert struct.unpack_from('<I',base,a-BASE)[0]==old_fn
+  put(a,struct.pack('<I',uu[fn]|1),'CH6 piano-grid lanes: '+fn)
  assert len(uw)<=0x800
  append=BASE+len(base);body=bytes(0x081c0000-append)+bytes(uw)+bytes(0x800-len(uw))+uc
  body+=b'BENTO_MOD:Chord:CH1:1.0\0';body+=b'\xff'*(-len(body)%4)
  put(append,body,'TF2 native settings UI implementation, application flash only')
  for a in [0x08040588,0x080a3bdc,0x080a3e94]:
   assert struct.unpack_from('<I',base,a-BASE)[0]==0x24042000;put(a,struct.pack('<I',0x24040000),'Reserve 8KB for Track FX inside native MPU permissions; stack unchanged')
- put(0x0818bad4,b'1.6H1\0','Visible EU10 test identifier')
+ put(0x0818bad4,b'1.6HA\0','Visible CH10 test identifier')
  for a,n in [(BASE,0x400),(0x080e0000,0x20000),(0x08100000,0x400)]:assert image[a-BASE:a-BASE+n]==base[a-BASE:a-BASE+n]
  restored=bytearray(image)
  for w in reversed(writes):
@@ -176,5 +204,5 @@ def build(base):
  return bytes(image),writes,aa,uu
 if __name__=='__main__':
  b=Path(sys.argv[1]).read_bytes();image,writes,aa,uu=build(b);out=Path(sys.argv[2]);out.mkdir(exist_ok=True)
- (out/'bento1.bin').write_bytes(image);(out/'manifest.json').write_text(json.dumps(dict(label='1.6H1',base_sha256=K16_SHA,sha256=hashlib.sha256(image).hexdigest(),writes=writes,audio_symbols=aa,ui_symbols=uu),indent=2)+'\n')
+ (out/'bento1.bin').write_bytes(image);(out/'manifest.json').write_text(json.dumps(dict(label='1.6HA',base_sha256=K16_SHA,sha256=hashlib.sha256(image).hexdigest(),writes=writes,audio_symbols=aa,ui_symbols=uu),indent=2)+'\n')
  print('EU10 built:',len(image),'bytes; exact K16 restore verified')

@@ -103,7 +103,7 @@ class Tests(unittest.TestCase):
   p=Edit(notes=[]);p.generated();before=p.events();undo=len(p.undo);self.dyn(p,9,75)
   self.assertEqual(p.events(),before);self.assertEqual(len(p.undo),undo)
  def test_velocity_symbol_uses_five_native_palette_bars(self):
-  p=Edit(notes=[]);self.full_view(p);p.generated();event=0x2002e000;p.w(event,0x73);p.w(event+8,9);p.call(UU['seq_eu_arrows'],p.seqview,event);self.dyn(p,1,80);self.header(p)
+  p=Edit(notes=[]);self.full_view(p);p.generated();p.call(UU['seq_eu_tab'],p.seqview);event=0x2002e000;self.dyn(p,1,80);self.header(p)
   paints=[]
   def fill(u,a,n,d):
    ptr=u.reg_read(UC_ARM_REG_R0);paints.append((tuple(p.r(ptr+i*4) for i in range(4)),u.reg_read(UC_ARM_REG_R1)));p.ret()

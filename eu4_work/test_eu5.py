@@ -16,7 +16,7 @@ class Seq(_OriginalSeq):
   super().__init__(*args,**kwargs);_KEEP.append(self)
 class Tests(unittest.TestCase):
  def setup_grid(self,n=7,k=3,rot=0):
-  p=Seq();p.arrow(9)
+  p=Seq();p.tab() # CH5: Euclidean view tab
   for key,value in [(0x191,n),(0x192,k),(0x193,rot)]:p.encoder(key,value)
   p.call(UU['seq_eu_grid'],p.view,1);return p
  def cells(self,p,field):return [p.word(p.view+0x34+i*0x704+field) if field==0x6f0 else p.u.mem_read(p.view+0x34+i*0x704+field,1)[0] for i in range(32)]
@@ -43,7 +43,7 @@ class Tests(unittest.TestCase):
   p=self.setup_grid();self.phase(p,5);p.call(UU['seq_lights_clean'],p.page)
   self.assertEqual(self.cells(p,0xec)[5],0)
  def test_left_normal_edit_bank_keeps_generated_notes_and_cycle_length(self):
-  p=self.setup_grid(7,3);before=bytes(p.u.mem_read(p.container,0x3004));p.arrow(0)
+  p=self.setup_grid(7,3);before=bytes(p.u.mem_read(p.container,0x3004));p.leave()
   p.call(UU['seq_eu_grid'],p.view,1)
   self.assertEqual(p.bank(),0);self.assertEqual(p.word(p.view+0x113f8),7)
   self.assertEqual(self.cells(p,0x30),[0]*7+[1]*25)
@@ -53,7 +53,7 @@ class Tests(unittest.TestCase):
   self.assertEqual(struct.unpack_from('<I',event,4)[0],3*960)
   p.time(6500);p.release(3);p.call(UU['seq_eu_header'],p.view)
   self.assertNotEqual(struct.unpack('<H',p.u.mem_read(p.view+0x113ac,2))[0],0x190)
-  p.arrow(9);p.call(UU['seq_eu_header'],p.view)
+  p.tab();p.call(UU["seq_eu_header"],p.view)
   self.assertEqual(struct.unpack('<H',p.u.mem_read(p.view+0x113ac,2))[0],0x190)
  def test_normal_bank_preserves_native_playhead_and_restores_cells(self):
   p=Seq();p.call(0x0815bde2,p.view,5);self.assertEqual(p.word(p.view+0x11408),5)

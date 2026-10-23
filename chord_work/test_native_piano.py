@@ -10,6 +10,7 @@ class Piano(Native):
   super().__init__();self.registry();self.view=0xc0200000;self.u.mem_map(self.view,0x200000);self.call(0x0815930c,self.view)
   for off,value in [(0x11cd00,self.seq),(0x11cd08,self.owner),(0x11cd18,16),(0x11cd10,0),(0x11cd14,4)]:self.w(self.view+off,value)
   self.u.mem_write(self.view+0x125dae,b'\0') # native pitched projection branch
+  self.u.mem_write(self.model+0x12c,b'\x17') # native SEQ handler 08142D58: pitched tracks use page 17
 class Tests(unittest.TestCase):
  def test_native_piano_constructs_all_eight_encoder_slots(self):
   p=Piano();self.assertEqual(p.r(p.view),0x0819e7b0);p.call(0x081599bc,p.view)

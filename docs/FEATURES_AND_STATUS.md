@@ -20,8 +20,14 @@ replacing the bootloader or pretending to have the manufacturer's source.
 | Euclidean patterns | In one-shot SEQ, Right selects the Euclidean encoder bank; Left restores normal controls. Up/Down switch sequences. | Live length/hits/rotation with independent drum cycles, real editable notes and a playhead. Maintainer tested core operation and later visuals/editing. |
 | Euclidean dynamics | Encoder 5 velocity shape, encoder 6 depth;7/8 remain locks. | Add accents, ramps and variation. Hit-based modes count actual pattern hits across loops. Maintainer tested mode/depth operation. |
 | Track channel strip | Double-tap TRACKS for EQ, compressor/auto makeup and soft clipping. | Shape a track's combined output. Maintainer has used it and reported CPU cost; per-effect hardware coverage and worst-case timing remain open. |
-| Select toggle | Intended button beside Undo for selecting several steps without toggling notes. | Implemented and software-tested; currently reported missing on the device. Do not claim usable. |
-| Chord/progression insertion | CH1 adds a native editor for chord types, voicings, strum, key/scale and progression presets; Insert makes ordinary notes. | Cut repetitive piano-roll entry. Its Chord button is currently missing on hardware, so this remains a development/review target. |
+| Select toggle | Button left of Undo in one-shot SEQ; lights up while on. Select several steps without toggling notes. | Maintainer confirmed working since CH2 / 1.6H2. See [DISPLAY.md](DISPLAY.md). |
+| Melodic Euclidean (CH3–CH9) | 4 rows layered over a pitched clip, each with its own note, length, hits and gate. | Its header button is hidden in CH10 while the workflow is reconsidered. |
+| Chord mode (CH4–CH10) | Pitched track piano roll: double-tap SEQ. Encoders: Type (incl. Diatonic / Diatonic 7 from the project scale), Voicing, Inversion, Rhythm, Start, End, Velocity, Bars; second bank for progressions. Left/Right walk chords, touching a note picks its chord, the current chord shows selected. | Write chords straight into the piano roll and hear them immediately. Maintainer tested chord mode and chord pads; Rhythm/recording are newer. |
+| Chord pads | In chord mode, keyboard pads play the whole chord on the pad's note and set the root; the played chord's name shows on encoder 1. Stays on for that track in other views (e.g. INST). Recording captures full chords; with a Rhythm set, recorded chords are turned into that rhythm. | Play progressions live and record them. Chord pads maintainer tested; recording with Rhythm pending. |
+| Bars encoder | Piano-roll Sequence view, encoder 5: clip length in bars (1…256); shows 4+ / 1- when not exact. | Faster than turning Step Count. Fixed in CH10 after a report. |
+| Euclid lanes in the piano roll | One-shot SEQ piano-roll layout: each Euclid lane greyed after its own length, with its own playhead box. | See polymeters at a glance. Reworked twice after owner videos; hardware check pending. |
+| Hold MIXER + encoders | Holding MIXER (or LAUNCH) and turning an encoder now also returns to the previous view on release. | Quick volume tweaks without losing your place. |
+| Meters after the channel strip | Mixer meters now measure after the EQ/compressor/clipper and fader. | Before, meters ignored the clipper and showed red too early. |
 
 Top row is pads 1–8; bottom row is9–16, both left to right. **PROJ acts as Shift**;
 the project pages it used to open are on **PROJ + PLAY**. Hold-based performance views
@@ -34,6 +40,7 @@ the destination instrument/sequencer page.
 | --- | --- | --- | --- |
 | `eu10` |1.6EA| Reproduce the pre-chord feature set. Recommended first comparison. | Select visibility needs confirmation after earlier missing-button reports. Experimental, not a certified stable build. |
 | `ch1` |1.6H1| Review/investigate the chord editor and shared header route. | Chord and Select missing on hardware. No live pad chord audition, grouped Update or saved chord groups. |
+| `ch10` |1.6HA| Newest: live chord mode, chord pads and recording, Bars encoder, Euclid lanes in the piano roll, meters after the channel strip. | Newest features still being hardware tested; melodic Euclid button hidden. Not a certified stable build. |
 
 Both include the existing synths, locks, navigation, Euclidean and channel-strip
 work. Older experiments remain in Git for reference. K8/K9/F1 had hardware

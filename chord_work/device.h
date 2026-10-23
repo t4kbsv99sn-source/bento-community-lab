@@ -8,3 +8,8 @@ int chord_get(void*,void*,unsigned,void*);
 int chord_event(void*,void*);
 int chord_piano_event(void*,void*);
 void **chord_state_slot(void);
+int chord_open_from_seq(void);
+int chord_live_active(void);
+void chord_live_header(void*);
+int chord_live_event(void*,void*);
+int chord_live_hw(void*,void*);

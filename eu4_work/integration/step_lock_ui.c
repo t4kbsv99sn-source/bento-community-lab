@@ -2,13 +2,15 @@
 #include "step_lock_shared.h"
 #include "seq_bank.h"
 #include "../../chord_work/device.h"
+#include "header_actions.h"
+int piano_eu_toolbar(void*,void*);
 #define MODEL ((void*)0x30024b00u)
 #define PICKER 0x1dau
 #define PICKER2 0x1e4u
 static u32 picker(u32 i){return i?PICKER2:PICKER;}
 #define MAGIC 0x47555042u
 typedef struct {u32 seq,drum,kind,kind2;} Target;
-typedef struct {u32 magic,view,seq,drum,kind,shift,pick,changed,error,next,selection,kind2,pick2,changed2;Target targets[64];u32 pool,pool_count,select_mode,selected[8],swallowed;void *chord_state;} UI;
+typedef struct {u32 magic,view,seq,drum,kind,shift,pick,changed,error,next,selection,kind2,pick2,changed2;Target targets[64];u32 pool,pool_count,select_mode,selected[8],swallowed;void *chord_state,*melodic_state;u32 auto_eu;void *lane_state;} UI;
 #define U ((volatile UI*)0x24048000u)
 _Static_assert(sizeof(UI)<=0x480,"Lock UI overlaps choice table");
 #define LOCK_COND_KEY 0x198u
@@ -34,6 +36,12 @@ static u32 pick(u32 i){return i?U->pick2:U->pick;}
 static void setpick(u32 i,u32 k){if(i)U->pick2=k;else U->pick=k;}
 static void init(void){if(U->magic!=MAGIC){for(u32 i=0;i<sizeof(UI)/4;i++)((volatile u32*)U)[i]=0;U->magic=MAGIC;}}
 void **chord_state_slot(void){init();return (void**)&U->chord_state;}
+void **piano_eu_slot(void){init();return (void**)&U->melodic_state;}
+void **lane_state_slot(void){init();return (void**)&U->lane_state;}
+/* CH5: arm the default Euclidean view on every navigation into page 27. */
+void seq_auto_arm(u32 page){init();U->auto_eu=page==0x27;}
+int seq_auto_take(void *v){init();if(!U->auto_eu||!v)return 0;U->auto_eu=0;return 1;}
+int seq_eu_tab(void*);void seq_eu_leave(void*);int seq_eu_mode(void*);
 static int supported(void *v){return v && (!B(v,0x113e0)||seq_eu_active(v)) && W(v,0x113e4) && W(v,0x113dc) && W(v,0x11400)<16 && FN(0x08133f7c,u32(*)(void*,void*))(MODEL,(u8*)v+0x113e8)==14;}
 static int snapshot(void *v,u32 *e){return FN(0x0815ba04,int(*)(void*,void*))(v,e);}
 static void remember(void){
@@ -264,7 +272,10 @@ __attribute__((used,retain)) u32 locks_condition_get(u32 w){return lc_condition(
 __attribute__((used,retain)) int seq_selection_active(void *v){if(U->magic!=MAGIC || U->view!=(u32)v)return 0;if(!supported(v))return 0;context(v);for(u32 i=0;i<8;i++)if(U->selected[i])return 1;return 0;}
 __attribute__((used,retain)) int seq_selection_match(void *v,u32 step){return seq_selection_active(v) && step<256 && (U->selected[step/32]>>(step%32)&1);}
 __attribute__((used,retain)) int seq_select_event(void *v,void *event){
- if(!supported(v)||H(event,0)!=0x1051)return 0;context(v);U->select_mode^=1;
+ u32 code=H(event,0);
+ if(code==0x1055)return seq_eu_tab(v);
+ if(code==0x49||code==0x4a){seq_eu_leave(v);return 0;}
+ if(!supported(v)||code!=0x1051)return 0;context(v);U->select_mode^=1;
  if(U->select_mode){W((void*)0x24048d80u,20)=0;for(u32 i=0;i<32;i++)W(v,0x11420+i*4)=0;}
  /* FA native menu descriptor #1, beside Undo. Native renderer owns the hitbox. */
  for(u32 i=0;i<2;i++){void *d=(void*)(0x30030168u+(i?0xfc0u:0x8c0u)+4u+80u);W(d,4)=(u32)(U->select_mode?select_on:select_label);}
@@ -289,22 +300,15 @@ __attribute__((used,retain)) int seq_select_touch_end(void *v){if(U->magic!=MAGI
 __attribute__((used,retain)) void seq_selection_reset(void *v){if(!supported(v))return;context(v);for(u32 i=0;i<8;i++)U->selected[i]=0;}
 
 /* EU9: persistent header actions are separate from the popup definitions.
- * Native header has six 48-byte action records at +74, not the F9/FA list. */
+ * CH2: Undo is the last native slot on SEQ page 27, so Select takes the
+ * rightmost free normal slot; header_sync makes late insertions visible. */
 __attribute__((used,retain)) int seq_toolbar(void *model,void *out,int native_changed){
  native_changed=chord_toolbar(model,out,native_changed);
- if(B(model,0x12c)!=0x27 || U->magic!=MAGIC || !supported((void*)U->view))return native_changed;
- int undo=-1,empty=-1;
- for(u32 i=0;i<6;i++){u32 k=H(out,0x74+i*48+44);if(k==0x1051){
-  const char *label=U->select_mode?select_on:select_label;u32 at=0;int changed=0;void *d=(u8*)out+0x74+i*48;
-  do{if(B(d,at)!=(u8)label[at])changed=1;B(d,at)=(u8)label[at];}while(label[at++]);
-  return native_changed||changed;
- }if(k==0x1032)undo=(int)i;if(!k && empty<0)empty=(int)i;}
- if(undo<0||empty<0||undo>=5)return native_changed;
- /* Shift only as far as the next empty action, preserving all native actions. */
- empty=-1;for(u32 i=(u32)undo+1;i<6;i++)if(!H(out,0x74+i*48+44)){empty=(int)i;break;}
- if(empty<0)return native_changed;
- for(int i=empty;i>undo+1;i--)for(u32 j=0;j<12;j++)W(out,0x74+i*48+j*4)=W(out,0x74+(i-1)*48+j*4);
- void *d=(u8*)out+0x74+(undo+1)*48;for(u32 j=0;j<12;j++)W(d,j*4)=W(out,0x74+undo*48+j*4);
- const char *label=U->select_mode?select_on:select_label;u32 at=0;do{B(d,at)=(u8)label[at];}while(label[at++]);
- B(d,32)=B(d,33)=0;H(d,44)=0x1051;return 1;
+ native_changed|=piano_eu_toolbar(model,out);
+ if(B(model,0x12c)==0x27 && U->magic==MAGIC && supported((void*)U->view)){
+  native_changed|=header_action_lit(out,0x1051,U->select_mode?select_on:select_label,U->select_mode!=0);
+  native_changed|=header_tab(out,0x1055,"Euclidean",seq_eu_mode((void*)U->view));
+ }
+ header_sync(out);
+ return native_changed;
 }

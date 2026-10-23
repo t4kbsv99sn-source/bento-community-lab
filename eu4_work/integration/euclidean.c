@@ -12,11 +12,14 @@ __attribute__((used)) int eu_hit(u32 step,u32 steps,u32 hits,u32 rotate){
  if(!steps||steps>MAX_STEPS||hits>steps||step>=steps)return 0;
  return (((step+steps-rotate%steps)%steps)*hits)%steps<hits;
 }
+/* Drum rows match the pad address (H+2); melodic rows match pitch (H+16). */
+static int match(Euclid *e,u32 *n){return B(n,0)==1&&(eu_mel(e)?H(n,16)==eu_mel_pitch(e):H(n,2)==e->pad);}
+__attribute__((used)) int eu_pitched_type(u32 t){return t==15||t==18||t==19||t==22;} /* CH7: class ids (0812EFxx registration): 15 multisample, 18 wavetable, 19 granular, 22 external; 17 is a loop track */
 static int current(Euclid *e,void *m){
  u32 owner=0,length=0;
  return e->valid && e->steps && e->steps<=MAX_STEPS && e->pad<16 &&
   FN(0x08133cfc,int(*)(void*,void*))(m,&owner) && owner==e->owner &&
-  FN(0x08133f7c,u32(*)(void*,void*))(m,&owner)==14 &&
+  (eu_mel(e)?eu_pitched_type(FN(0x08133f7c,u32(*)(void*,void*))(m,&owner)):FN(0x08133f7c,u32(*)(void*,void*))(m,&owner)==14) &&
   FN(0x08133614,int(*)(void*,void*,u32,void*))(m,&e->seq,0x62,&length) && length>0 && length<=MAX_STEPS;
 }
 __attribute__((used)) void eu_capture(Euclid *e,void *v){
@@ -61,7 +64,7 @@ __attribute__((used)) int eu_apply(Euclid *e,void *m){
  u32 bits[8]={0},n[6],remove=0,create=0,maxid=0;
  for(u32 i=0;i<count;i++){
   if(!read(c,i,n))return EU_INVALID;if(n[3]>maxid)maxid=n[3];
-  int s=slot(n);if(B(n,0)!=1||H(n,2)!=e->pad||s<0||(u32)s>=MAX_STEPS)continue;
+  int s=slot(n);if(!match(e,n)||s<0||(u32)s>=MAX_STEPS)continue;
   if((u32)s>=e->steps||!eu_hit((u32)s,e->steps,e->hits,e->rotate))remove++;
   else bits[(u32)s/32]|=1u<<((u32)s&31);
  }
@@ -74,7 +77,7 @@ __attribute__((used)) int eu_apply(Euclid *e,void *m){
  void *temp=(void*)e->scratch;empty(temp);
  for(u32 i=0;i<count;i++){
   if(!read(c,i,n))return EU_INVALID;int s=slot(n);
-  if(B(n,0)==1&&H(n,2)==e->pad&&s>=0&&(u32)s<MAX_STEPS&&((u32)s>=e->steps||!eu_hit((u32)s,e->steps,e->hits,e->rotate)))add(temp,n);
+  if(match(e,n)&&s>=0&&(u32)s<MAX_STEPS&&((u32)s>=e->steps||!eu_hit((u32)s,e->steps,e->hits,e->rotate)))add(temp,n);
  }
  /* Native bulk delete takes exactly one native undo snapshot before mutation,
     updates model and audio, and emits the standard sequence refresh event. */
@@ -84,6 +87,7 @@ __attribute__((used)) int eu_apply(Euclid *e,void *m){
  for(u32 s=0;s<e->steps;s++){
   if(!eu_hit(s,e->steps,e->hits,e->rotate)||(bits[s/32]&(1u<<(s&31))))continue;
   u32 event[6]={1u|(e->pad<<16),s*960,960,0,e->velocity<<16,0};
+  if(eu_mel(e)){event[0]=1u;event[2]=eu_mel_gate(e)*240u;event[4]=eu_mel_pitch(e)|(e->velocity<<16);}
   /* Byte 1 zero = native Always, not our A:B condition ID 100. Native ID
      allocator advances the project's counter; retained hit IDs never change. */
   event[3]=FN(0x0812e070,u32(*)(void*,u32,void*))(root,e->seq,event);add(temp,event);
@@ -107,7 +111,7 @@ int eu_velocity(Euclid *e,void *m){
  void *c=(u8*)node+12,*temp=(void*)e->scratch;u32 n[6],count=W(c,0x3000),changed=0;if(count>MAX_NOTES)return EU_INVALID;empty(temp);
  for(u32 i=0;i<count;i++){
   if(!read(c,i,n))return EU_INVALID;int s=slot(n);
-  if(B(n,0)!=1||H(n,2)!=e->pad||s<0||(u32)s>=e->steps||H(n,18)==e->velocity)continue;
+  if(!match(e,n)||s<0||(u32)s>=e->steps||H(n,18)==e->velocity)continue;
   H(n,18)=(u16)e->velocity;add(temp,n);changed++;
  }
  if(!changed)return EU_SAME;
@@ -115,4 +119,29 @@ int eu_velocity(Euclid *e,void *m){
  FN(0x08136544,void(*)(void*,void*,void*))(m,&e->seq,temp);
  W(m,0x36c4)=1;u32 event[5]={0xc7,e->seq,0,0,0};FN(0x08173272,void(*)(void*,void*))((u8*)m+0x160,event);
  return EU_OK;
+}
+
+/* CH3: move a melodic row's notes to another pitch in one native undo gesture.
+   Every note of the old pitch belongs to the row once it is generator-owned. */
+int eu_repitch(Euclid *e,void *m,u32 pitch){
+ if(!eu_mel(e)||pitch>127||!current(e,m)||!scratch(e))return EU_STALE;
+ void *node=0,*root=(void*)W(m,0);if(!root||!FN(0x0812dfe8,int(*)(void*,u32,void*))(root,e->seq,&node)||!node)return EU_STALE;
+ void *c=(u8*)node+12,*temp=(void*)e->scratch;u32 n[6],count=W(c,0x3000),moved=0;if(count>MAX_NOTES)return EU_INVALID;
+ for(u32 i=0;i<count;i++){if(!read(c,i,n))return EU_INVALID;if(B(n,0)==1&&H(n,16)==pitch&&pitch!=eu_mel_pitch(e))return EU_USED;}
+ empty(temp);
+ for(u32 i=0;i<count;i++){if(!read(c,i,n))return EU_INVALID;if(!match(e,n))continue;H(n,16)=(u16)pitch;add(temp,n);moved++;}
+ if(!moved)return EU_SAME;
+ FN(0x081338dc,void(*)(void*,void*))(m,&e->seq);FN(0x08136544,void(*)(void*,void*,void*))(m,&e->seq,temp);
+ W(m,0x36c4)=1;u32 event[5]={0xc7,e->seq,0,0,0};FN(0x08173272,void(*)(void*,void*))((u8*)m+0x160,event);return EU_OK;
+}
+
+/* CH3: apply a melodic row's gate to its existing notes (one undo gesture). */
+int eu_gate_notes(Euclid *e,void *m){
+ if(!eu_mel(e)||!current(e,m)||!scratch(e))return EU_STALE;
+ void *node=0,*root=(void*)W(m,0);if(!root||!FN(0x0812dfe8,int(*)(void*,u32,void*))(root,e->seq,&node)||!node)return EU_STALE;
+ void *c=(u8*)node+12,*temp=(void*)e->scratch;u32 n[6],count=W(c,0x3000),changed=0,len=eu_mel_gate(e)*240u;if(count>MAX_NOTES)return EU_INVALID;empty(temp);
+ for(u32 i=0;i<count;i++){if(!read(c,i,n))return EU_INVALID;int s=slot(n);if(!match(e,n)||s<0||(u32)s>=e->steps||n[2]==len)continue;n[2]=len;add(temp,n);changed++;}
+ if(!changed)return EU_SAME;
+ FN(0x081338dc,void(*)(void*,void*))(m,&e->seq);FN(0x08136544,void(*)(void*,void*,void*))(m,&e->seq,temp);
+ W(m,0x36c4)=1;u32 event[5]={0xc7,e->seq,0,0,0};FN(0x08173272,void(*)(void*,void*))((u8*)m+0x160,event);return EU_OK;
 }

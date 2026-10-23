@@ -30,13 +30,15 @@ What's in there so far:
 - Programmable Kick, Snare and Hi-hat synths
 - Euclidean drum patterns with their own lengths, velocity shapes and editable notes
 - A per-track channel strip: EQ, compressor and soft clipping
-- A chord and progression editor (very early: its button doesn't show up on the device yet)
+- Chord mode right in the piano roll (double-tap SEQ): diatonic chords from your project's scale, a Rhythm encoder, and pads that play and record whole chords
+- Euclidean lanes drawn in the piano roll, each with its own length and playhead
+- A Bars encoder for quick clip lengths, and mixer meters that finally see the clipper
 
 The full rundown, including what's still wonky, is in [docs/FEATURES_AND_STATUS.md](docs/FEATURES_AND_STATUS.md).
 
 ## Try it
 
-You build it yourself from your own original Bento 1.6.1 firmware. No 1010music firmware lives in this repo. The [quick start](docs/QUICKSTART.md) walks you through it: one command builds a release, checks it, and gives you a ZIP with the firmware plus a way back to stock.
+You build it yourself from your own original Bento 1.6.1 firmware. No 1010music firmware lives in this repo. The [quick start](docs/QUICKSTART.md) walks you through it: one command builds a release, checks it, and gives you a ZIP with the firmware plus a way back to stock. The newest one is `--target ch10` (shows as 1.6HA on the Bento).
 
 ## Contributions
 
@@ -58,7 +60,7 @@ The contributors cannot guarantee the safety or reliability of experimental buil
 
 ## A note on how it's made
 
-This thing runs on Enthusiasm and Vibe. Much of the code was written with AI coding assistants (Codex and Claude) and then tried out on a real Bento.
+Much of the code was written with AI coding assistants and then tried out on a real Bento.
 
 ## Related projects
 

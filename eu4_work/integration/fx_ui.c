@@ -35,6 +35,9 @@ static void refresh(){if(U->view)FN(0x08145cf4,void(*)(void*))((void*)U->view);}
 static const u16 eu_keys[6]={0x190,0x191,0x192,0x193,0x194,0x195};
 static const char *const eu_names[6]={"Pad","Length","Hits","Rotate","Vel Mode","Vel Depth"};
 static const char *const vel_names[]={"Flat","Alternate","Hits 3","Hits 4","Grid 4","Rise","Fall","Wave","Humanize","Rnd Accent"};
+u32 *eu_shared_scratch(void){return (u32*)&U->eu.scratch;}
+const char *eu_drum_title(u32 i){return i<6?eu_names[i]:0;}
+const char *const *eu_vel_names(void){return vel_names;}
 static int eu_index(u32 key){for(u32 i=0;i<6;i++)if(eu_keys[i]==key)return (int)i;return -1;}
 static int eu_registry(){
  u32 r=W((void*)0x30031484u,0);if(!r)return 0;
@@ -56,14 +59,24 @@ __attribute__((used)) void eu_view_capture(void *v){
  else FN(0x08133614,int(*)(void*,void*,u32,void*))(MODEL,(u8*)v+0x113e4,0x62,&n);
  if(n&&n<=256){W(v,0x113f8)=n;if(W(v,0x113f4)>=n)W(v,0x113f4)=0;}
 }
+u32 live_record_check(void);
+void chord_track_tick(void);
 __attribute__((used)) int fx_dispatch(void *m,u32 code,u32 context,u32 index){
  (void)context;init();
+ live_record_check(); /* CH7: recorded hits on a Euclid pad switch it to Manual */
+ chord_track_tick(); /* CH9: chord pads follow the chord-mode track in every view */
  if(code==0xb0&&index==U->held&&U->held){U->held=0;return 1;}
  /* Native HAL_GetTick (081152C0) reads this millisecond counter. A first
     TRACKS press immediately follows K16; only a second short tap is consumed.
     Pad actions, shift, other buttons and a long hold cancel the tap sequence. */
  u32 tick=W((void*)0x3001fe2cu,0);
- if(index!=2 || (code!=0xaf&&code!=0xb0)){
+ /* CH8 (owner): K16's hold MIXER/LAUNCH returns to the previous view on release
+    when the hold was used (a pad). An encoder turn (message AB) while holding
+    now counts as use too, e.g. changing track volume. K16 state 24048CC0:
+    {magic, button, used, ...}. */
+ if(code==0xab&&W((void*)0x24048cc0u,0)==0x354d5442u){u32 held=W((void*)0x24048cc0u,4);if(held==3||held==5)W((void*)0x24048cc0u,8)=1;}
+ /* CH3: SEQ (index 11) double-tap on the pitched piano roll opens Chord. */
+ if((index!=2&&index!=11) || (code!=0xaf&&code!=0xb0)){
   if(code==0xaf||code==0xb0||code==0xfe){U->armed=0;if(U->pressed)U->pressed=2;}return 0;
  }
  if(W((void*)0x24048d60u,8)){U->armed=0;U->pressed=0;return 0;}
@@ -74,10 +87,11 @@ __attribute__((used)) int fx_dispatch(void *m,u32 code,u32 context,u32 index){
   U->pressed=0;return 0;
  }
  if(code==0xaf){
-  int second=U->armed && U->last_button==index && tick-U->up_tick<=350 && B(m,0x12c)==(index==2?2:0x27);U->armed=0;
+  int second=U->armed && U->last_button==index && tick-U->up_tick<=350 && B(m,0x12c)==(index==2?2:0x17);U->armed=0;
   U->pressed=1;U->down_tick=tick;U->last_button=index;
   if(!second)return 0;
   U->pressed=0;
+  if(index==11)return chord_open_from_seq();
   {if(!registry())return 1;sync();u32 selected=FN(0x0812dc74,u32(*)(void*,u32))((u8*)m+4,0x131);U->selected=selected<8?selected:0;U->active=1;}
   U->held=index;U->nav=1;U->view=0;
   FN(0x081420ec,void(*)(void*,u32,u32,u32,u32))(m,0x1a,0,0,0);U->nav=0;
@@ -85,7 +99,9 @@ __attribute__((used)) int fx_dispatch(void *m,u32 code,u32 context,u32 index){
  }
  return 0;
 }
-__attribute__((used)) void fx_nav(void *m,u32 page){chord_nav(m,page);(void)m;(void)page;init();if(!U->nav){U->active=0;U->view=0;if(page!=0x27){U->eu_mode=0;U->step_view=0;}}}
+extern void piano_eu_nav(u32);
+extern void seq_auto_arm(u32);
+__attribute__((used)) void fx_nav(void *m,u32 page){chord_nav(m,page);piano_eu_nav(page);seq_auto_arm(page);(void)m;(void)page;init();if(!U->nav){U->active=0;U->view=0;if(page!=0x27){U->eu_mode=0;U->step_view=0;}}}
 __attribute__((used)) int fx_header(void *m,void *handle,void *out,u32 mode,u32 caller){
  if(chord_header(m,handle,out,mode,caller))return 1;
  (void)m;(void)handle;(void)mode;init();
@@ -134,16 +150,31 @@ __attribute__((used)) void fx_finish(void *pane,void *event){(void)pane;if(H(eve
 /* EU3 edits the native SEQ encoder bar, never navigates to GenericProperties. */
 extern void locks_header_before(void*);
 int seq_eu_active(void *v){init();return U->eu_mode&&U->step_view==(u32)v&&B(MODEL,0x12c)==0x27;}
+static int drum_view(void *v){return v&&B(MODEL,0x12c)==0x27&&W(v,0x113e4)&&W(v,0x11400)<16&&FN(0x08133f7c,u32(*)(void*,void*))(MODEL,(u8*)v+0x113e8)==14;}
+/* CH5: arrows are always native (Left/Right = previous/next event, Up/Down =
+   native paging). Only Shift+Left keeps its Euclid meaning: stop generating
+   for the selected pad and keep its notes. The bank is chosen with the
+   Euclidean view tab (header id 1055) instead of Right. */
 int seq_eu_arrows(void *v,void *event){
- init();if(!v||B(MODEL,0x12c)!=0x27||!W(v,0x113e4)||W(v,0x11400)>=16||FN(0x08133f7c,u32(*)(void*,void*))(MODEL,(u8*)v+0x113e8)!=14)return 0;
- u32 id=W(event,8);if(id!=0&&id!=1&&id!=8&&id!=9)return 0;
- U->step_view=(u32)v;eu_capture(&U->eu,v);
- if(id==1||id==8){FN(0x0815bc4c,void(*)(void*,int))(v,id==1?-1:1);return 1;}
- if(id==0){U->eu_mode=0;if(W((void*)0x24048d60u,8))live_edit(&U->eu,5,0);}
- else {if(!live_begin(&U->eu)||!eu_registry())return 1;W((void*)0x24048d80u,20)=0;seq_selection_reset(v);U->eu_mode=1;live_generate(&U->eu,5,1);}
- if(id==0)FN(0x0815c4b8,void(*)(void*))(v);else FN(0x0815c27c,void(*)(void*))(v);return 1;
+ init();if(!drum_view(v))return 0;
+ if(W(event,8)==0&&W((void*)0x24048d60u,8)){U->step_view=(u32)v;eu_capture(&U->eu,v);live_edit(&U->eu,5,0);FN(0x0815c27c,void(*)(void*))(v);return 1;}
+ return 0;
 }
+static int eu_enter(void *v){
+ U->step_view=(u32)v;eu_capture(&U->eu,v);if(!live_begin(&U->eu)||!eu_registry())return 0;
+ W((void*)0x24048d80u,20)=0;seq_selection_reset(v);U->eu_mode=1;live_generate(&U->eu,5,1);return 1;
+}
+/* Euclidean tab pressed (from the native SEQ action dispatcher). */
+/* Like the former Right: also clears a held-step inspection so the generator
+   controls come back when the tab is tapped again. */
+int seq_eu_tab(void *v){init();if(!drum_view(v))return 0;if(!U->eu_mode)eu_enter(v);else{W((void*)0x24048d80u,20)=0;seq_selection_reset(v);}FN(0x0815c27c,void(*)(void*))(v);return 1;}
+/* Native Step/Sequence tab pressed: leave the Euclid bank, then native handles it. */
+void seq_eu_leave(void *v){init();if(U->eu_mode&&U->step_view==(u32)v){U->eu_mode=0;FN(0x0815c4b8,void(*)(void*))(v);}}
+int seq_eu_mode(void *v){init();return U->eu_mode&&U->step_view==(u32)v;}
+extern int seq_auto_take(void*);
 void seq_eu_header(void *v){
+ /* CH5: one-shot SEQ always opens in the Euclidean view (owner). */
+ if(seq_auto_take(v)&&drum_view(v)&&!U->eu_mode)eu_enter(v);
  if(!seq_eu_active(v)||!eu_registry()||step_editing(v))return;eu_capture(&U->eu,v);EuPad p=live_value(&U->eu);
  u32 values[6]={U->eu.pad+1,eu_length(p),eu_pulses(p),eu_rotation(p),eu_mode(p),eu_depth(p)};
  for(u32 i=0;i<6;i++){

@@ -14,5 +14,14 @@
     "sha": "20c36100c2d44d3d0743e8e9ab7833eafe6c3517b68b0eca688d9e01dc3e9bca",
     "builder": "build_ch1.py",
     "tests": 284
+  },
+  "ch10": {
+    "ref": "release/ch10-1.6HA",
+    "commit": null,
+    "label": "1.6HA",
+    "sha": "0e85070685cb451ade4e3cf5adfc62fb1ab95483f7fcdcbf506ae67bc4ca2c76",
+    "builder": "build_ch10.py",
+    "tests": 361,
+    "notes": "CH10 / 1.6HA: live chord mode on the piano roll (double-tap SEQ): chord pads, Rhythm, recording, diatonic types, Bars encoder; Euclid lanes in the piano roll; meters after the channel strip. Select is confirmed working on the device; the newest features are still being tested on hardware. Not a certified stable release."
   }
 }

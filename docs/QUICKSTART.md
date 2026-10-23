@@ -19,11 +19,11 @@ python tools/prepare_tester.py --stock-dir /absolute/path/to/original-1.6.1 --ou
 
 `--stock-dir` must contain `bento1.bin` **and** `bento2.bin` from the original
 1.6.1 download, not another modified build. Use a new/empty output directory.
-For CH1, add `--target ch1`; the default is `--target eu10`.
+For the newest checkpoint, CH10 / 1.6HA (chord mode, Euclid lanes, Bars encoder), add `--target ch10`. For CH1, add `--target ch1`; the default is `--target eu10`.
 
 The helper extracts the pinned source commit into an isolated workspace, builds
 it, runs all release checks and compares the final firmware hash to the known
-release. It then creates **Bento_1.6EA_Tester.zip** (or **Bento_1.6H1_Tester.zip**).
+release. It then creates **Bento_1.6EA_Tester.zip** (or **Bento_1.6H1_Tester.zip** / **Bento_1.6HA_Tester.zip**).
 No earlier ZIP, firmware download, build-time GitHub token or Ghidra export is
 required.
 

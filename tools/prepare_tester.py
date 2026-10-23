@@ -33,9 +33,7 @@ def verify_build(build,main,target):
 def write_package(out,main,controller,image,target,source_archive):
  readme=f'''Bento Lab {target['label']} / {target['ref']} — experimental device test
 
-Current CH1 feedback: Chord and Select buttons are missing. EU10 predates Chord;
-its shared Select UI still needs confirmation after earlier missing-button reports.
-These issues are not fixed here. EU10 is not a certified stable release.
+{target.get('notes',"Current CH1 feedback: Chord and Select buttons are missing. EU10 predates Chord; its shared Select UI still needs confirmation after earlier missing-button reports. These issues are not fixed here. EU10 is not a certified stable release.")}
 
 PROJ NOW WORKS AS SHIFT: the project pages it used to open are on PROJ + PLAY.
 
