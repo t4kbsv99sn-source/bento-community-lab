@@ -1,0 +1,78 @@
+{
+  "profile_schema": 1,
+  "firmware_version": "1.6.1",
+  "base": 134479872,
+  "sha256": "14475e9d5068f5659d0fe0b00fc1278c1479c43ed9fda3d40654d5f3a7a6bbb3",
+  "hooks": {
+    "pad": {
+      "address": "0x0808d1fe",
+      "original": "9c42f6d0"
+    },
+    "consumer": {
+      "address": "0x0813f98c",
+      "original": "a5f11103"
+    }
+  },
+  "symbols": {
+    "PRODUCER_GLOBAL": "0x2401bd3c",
+    "ENQUEUE": "0x08082221",
+    "PAD_NEXT": "0x0808d1f1",
+    "PAD_CHANGED": "0x0808d203",
+    "SELECT_TRACK": "0x0813bc3d",
+    "DISPATCH_NEXT": "0x0813f2fd",
+    "DISPATCH_STOCK": "0x0813f991",
+    "TRACKS_MASK": "0x2000"
+  },
+  "physical_pad_map": {
+    "top_internal_inputs": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "bottom_internal_inputs": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "row_groups_verified_on_device": true,
+    "first_two_columns_verified_on_device": true,
+    "remaining_column_order": "inferred; verify in T1"
+  },
+  "code_storage": null,
+  "state_storage": null,
+  "bootloader_protected_ranges": null,
+  "installer_erase_ranges_verified": false,
+  "installable": false,
+  "integration_candidate": {
+    "status": "emulator-tested-not-device-verified",
+    "code_addresses": [
+      "0x080d0000",
+      "0x081b3f40",
+      "0x080d0300"
+    ],
+    "state_start": "0x24048d80",
+    "state_end": "0x24048da0",
+    "heap_end_literal_locations": [
+      "0x08040588",
+      "0x080a3bdc",
+      "0x080a3e94"
+    ],
+    "requires_appended_image_acceptance": true
+  },
+  "tracks_button": {
+    "logical_id": 2,
+    "raw_mask": "0x2000",
+    "evidence": "Owner D2 readout A=1 B=2 C=3 D=1, no pad notes, 2026-10-18",
+    "previous_incorrect_logical_id": 5
+  }
+}

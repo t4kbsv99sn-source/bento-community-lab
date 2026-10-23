@@ -1,0 +1,31 @@
+{
+  "lgpl_repository": "https://github.com/daisyaudio/DaisySP-LGPL",
+  "lgpl_commit": "c89d380c62620d6fee9105c5035e081c9b7ea843",
+  "lgpl_original_sha256": {
+    "LICENSE": "637cad0a42f4801acaf10322eeebdd06d89f501f2fe5a35ee74585a192f76f06",
+    "Source/Dynamics/compressor.cpp": "09bc49674a27266650b1676dcaba0c2b75a82efd9721fbb49b7fa3889cf9bbee",
+    "Source/Dynamics/compressor.h": "f55922390da56906a4723c6c30ff3551a74441f6c2c3a949153c9d587d42fade",
+    "Source/Filters/biquad.cpp": "c927ac55da2b63308f01d179b6c7b531623f8aa10014fe7a3c6eba8329e043c8",
+    "Source/Filters/biquad.h": "12b7f01f8f5dedfcb5096d6c778b77141408034c998c067b34565b4eefdbcc95"
+  },
+  "packaged_sha256": {
+    "LICENSE": "637cad0a42f4801acaf10322eeebdd06d89f501f2fe5a35ee74585a192f76f06",
+    "Utility/upstream_dsp.h": "534f0f76b7794939a5fff9b128b8fddb23ae0e63ad3354f663445d417924099a",
+    "Utility/dsp.h": "114ea621f73acaf1c5b3a10c340eae0283771f95f71637d496ae87b77ea89343",
+    "Source/Dynamics/compressor.h": "832343397b139065f4f20f7668acb827168050c17849aa6ea7b12c64f380a8a8",
+    "Source/Dynamics/compressor.cpp": "c56ed0d3ae478574f1bb93e5443348a1d002f7ff6a60c257d5f31eb566e02fba",
+    "Source/Filters/biquad.h": "a3327f20bee6e5056eae6848d998fcd13c7470743bd075721631f96dbc5a53c1",
+    "Source/Filters/biquad.cpp": "c927ac55da2b63308f01d179b6c7b531623f8aa10014fe7a3c6eba8329e043c8"
+  },
+  "mit_utility_commit": "2c72eaf9eac5fc0dca1919d65d606da907832618",
+  "mit_upstream_utility_sha256": "534f0f76b7794939a5fff9b128b8fddb23ae0e63ad3354f663445d417924099a",
+  "changes": [
+    "Biquad: add normalized-coefficient setter without clearing recursive histories",
+    "Compressor: initialize setter dependencies deterministically and reset to unity",
+    "Utility subset retains upstream fastlog and pow10 helpers; floors silence before logarithm",
+    "Track wrapper: three RBJ EQ bands, stereo linking, smoothing, validation, meters and settings record",
+    "ARM test math is our explicit freestanding approximation, not upstream libm",
+    "SoftClip and SoftLimit helpers from pinned MIT upstream Utility/dsp.h, with per-track ceiling, binary32 ceiling guard and smoothed bypass",
+    "F1 wrapper: smoothed DaisySP AutoMakeup plus manual trim; schema 3 and native track/menu/project integration"
+  ]
+}

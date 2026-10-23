@@ -1,0 +1,18 @@
+{
+  "eu10": {
+    "ref": "release/eu10-1.6EA",
+    "commit": null,
+    "label": "1.6EA",
+    "sha": "4ed81f1604459f338624fcfd4a22e40b29b992f4e9df4303de1a0564b8b32a37",
+    "builder": "build_eu10.py",
+    "tests": 249
+  },
+  "ch1": {
+    "ref": "release/ch1-1.6H1",
+    "commit": null,
+    "label": "1.6H1",
+    "sha": "20c36100c2d44d3d0743e8e9ab7833eafe6c3517b68b0eca688d9e01dc3e9bca",
+    "builder": "build_ch1.py",
+    "tests": 284
+  }
+}

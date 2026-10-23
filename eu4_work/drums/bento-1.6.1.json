@@ -1,0 +1,208 @@
+{
+  "profile_schema": 1,
+  "firmware_version": "1.6.1",
+  "base": 134479872,
+  "sha256": "14475e9d5068f5659d0fe0b00fc1278c1479c43ed9fda3d40654d5f3a7a6bbb3",
+  "hooks": {
+    "pad": {
+      "address": "0x0808d1fe",
+      "original": "9c42f6d0"
+    },
+    "consumer": {
+      "address": "0x0813f98c",
+      "original": "a5f11103"
+    }
+  },
+  "symbols": {
+    "PRODUCER_GLOBAL": "0x2401bd3c",
+    "ENQUEUE": "0x08082221",
+    "PAD_NEXT": "0x0808d1f1",
+    "PAD_CHANGED": "0x0808d203",
+    "SELECT_TRACK": "0x0813bc3d",
+    "DISPATCH_NEXT": "0x0813f2fd",
+    "DISPATCH_STOCK": "0x0813f991",
+    "TRACKS_MASK": "0x2000",
+    "LAUNCH_MASK": "0x1000",
+    "MIXER_MASK": "0x400",
+    "MODIFIERS_MASK": "0x3500"
+  },
+  "physical_pad_map": {
+    "top_internal_inputs": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "bottom_internal_inputs": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "row_groups_verified_on_device": true,
+    "first_two_columns_verified_on_device": true,
+    "remaining_column_order": "inferred; verify in T2"
+  },
+  "code_storage": null,
+  "state_storage": null,
+  "bootloader_protected_ranges": null,
+  "installer_erase_ranges_verified": false,
+  "installable": false,
+  "integration_candidate": {
+    "status": "emulator-tested-C5-device-test-pending",
+    "code_addresses": [
+      "0x080d0000",
+      "0x080d0800",
+      "0x081b3f40",
+      "0x081b4100",
+      "0x081b5000",
+      "0x081b5200",
+      "0x081b5300"
+    ],
+    "state_start": "0x24048ca0",
+    "state_end": "0x24048da0",
+    "heap_end_literal_locations": [
+      "0x08040588",
+      "0x080a3bdc",
+      "0x080a3e94"
+    ],
+    "requires_appended_image_acceptance": true
+  },
+  "tracks_button": {
+    "logical_id": 2,
+    "raw_mask": "0x2000",
+    "evidence": "Owner D2 readout A=1 B=2 C=3 D=1, no pad notes, 2026-10-18",
+    "previous_incorrect_logical_id": 5
+  },
+  "module": "hold-controls",
+  "version": "0.8.1",
+  "native_api": {
+    "GET_PROPERTY": "0x0812dc74",
+    "NAVIGATE": "0x081420ec",
+    "BUTTON_EVENT": "0x08142afc",
+    "FIND_TRACK": "0x08133960",
+    "SELECT_TRACK": "0x0813bc3c",
+    "PLAYING_STATUS": "0x081322ac",
+    "SELECT_SEQUENCE": "0x08136bd4",
+    "PROPERTY_EVENT": "0x0813bfb0",
+    "ENGINE_PROPERTY": "0x0810b5c8",
+    "MIXER_EVENT": "0x0814baea",
+    "MIXER_RENDER": "0x0814b630",
+    "RESOLVE_OBJECT": "0x0812d80e",
+    "TRACK_PROPERTY_EVENT": "0x08131ae0",
+    "MIXER_PAD_MODE": "0x0813bc24",
+    "FLUSH_PAD_LIGHTS": "0x081257f0",
+    "CLEAR_PAD_HIGHLIGHTS": "0x081257CC"
+  },
+  "native_mixer_ui": {
+    "render_vtable_entry": "0x0819dd20",
+    "original_render": "0x0814b631",
+    "solo_mute_toolbar_event": "0x10c",
+    "pane_mode_offset": "0x9a08"
+  },
+  "hardware_status": "T2 fixed Level pattern experiment; device verification pending",
+  "pad_labels": {
+    "top": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "bottom": [
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ]
+  },
+  "empty_step_color": {
+    "address": "0x08139984",
+    "original_hex": "2f2f1600",
+    "replacement_hex": "00000000",
+    "load_site": "0x08139902",
+    "active_step_path": "0x08139976",
+    "scope": "Native one-shot step-sequencer empty-slot branch only"
+  },
+  "momentary_inst": {
+    "origin_page": "0x27",
+    "track_type": "0x0e",
+    "button_id": 10,
+    "selected_drum_property": "0x74",
+    "state_start": "0x24048cf0",
+    "preserve_on_return": [
+      "current 13C/140 handles",
+      "parent selected drum 74"
+    ],
+    "restore_on_return": [
+      "sequence 144",
+      "scene 148",
+      "previous page 13A"
+    ],
+    "selection_observer": {
+      "native_entry": "0x0813bd10",
+      "original_hex": "f0b589b0",
+      "trampoline": "0x081b5300",
+      "picked_flag": "0x24048d04",
+      "scope": "Mark valid cell selection requests while INST hold is active; original handler always runs"
+    },
+    "return_condition": "Native valid cell selection after hold is armed; no choice stays on INST; same-cell selection counts"
+  },
+  "mixer_lights": {
+    "state": "0x24048d40",
+    "native_model_mode_offset": "0x3c7c",
+    "native_pad_state_offset": "0x19c4",
+    "scope": "Use native Solo/Mute LED refresh on entry and after each edit; flush changed colors, restore previous mode on return"
+  },
+  "step_inspect": {
+    "module_version": "0.8.1",
+    "state": "0x24048d80",
+    "state_bytes": 32,
+    "native_held_timestamps": "view+0x11420",
+    "implementation": "holdstep.c / holdstep.py",
+    "last_hit_selection": "same view, clip, drum and visible step window only"
+  },
+  "drum_mute_shortcut": {
+    "version": "0.12.0",
+    "page": 7,
+    "modifier": "PROJ",
+    "pads": "all 16; native child property 0x73",
+    "mute_property": "0x1e0",
+    "native_touch_event": "0xcf",
+    "native_handler": "0x0813bfb0",
+    "audio_setter": "0x08091046",
+    "audio_mute_byte": "one-shot root+0x600",
+    "queued_request_action": 9,
+    "context_guard": "native selected-cell handle at model+0x13c",
+    "m7_page_gate": "model 0x30024b00+0x12c; original MIDI/SEQ paths preserved"
+  },
+  "daisy_kick": {
+    "version": "K1 / 0.13.0",
+    "native_render_entry": "0x08091820",
+    "wrappers": "0x080d5800",
+    "pitch_adapter": "0x080d5880",
+    "code": "0x080d6000",
+    "state": "0x24042000..0x24044000",
+    "native_processing": "0x08092d00",
+    "marker_frames": 144019,
+    "marker_rate": 48000,
+    "marker_signature": "0xb1e70a5c",
+    "synth": "DaisySP SyntheticBassDrum",
+    "dedicated_synth_controls": false
+  }
+}

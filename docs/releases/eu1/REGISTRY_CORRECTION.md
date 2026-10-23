@@ -1,0 +1,1 @@
+Initial UI test failure: IDs 1D4, 1D5 and 1D6 were already occupied after the native registry constructor. The collision guard refused the page; 13 core tests passed and three UI tests failed. No image was delivered. Corrected all six EU controls to constructor-verified empty slots 190..195; the final 17 Euclidean tests pass. Native descriptors were never overwritten.

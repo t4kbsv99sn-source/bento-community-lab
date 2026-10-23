@@ -1,0 +1,42 @@
+{
+  "module_schema": 1,
+  "id": "tracks-pad-select",
+  "version": "0.4.0",
+  "source_marker": "BENTO_MOD:tracks-pad-select:0.4.0",
+  "enabled_by_default_in_emulator": true,
+  "pad_labels": {
+    "top": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "bottom": [
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ]
+  },
+  "gesture": "Hold TRACKS + physical pad 1..8 selects track 1..8",
+  "experimental_message": {
+    "code": 254,
+    "magic": "0x314d5442",
+    "tail": "0x31525442",
+    "context": -2
+  },
+  "state_magic": "0x31534d42",
+  "production_message_namespace_verified": false,
+  "queue_reserved_slots": 32,
+  "on_admission_failure": "Suppress owned pad until release; count rejected selection; do not produce a note",
+  "disable_behavior": "Stop claiming fresh pads; suppress already-owned pads until their releases",
+  "removal": "Rebuild from exact original firmware with this module omitted; never blindly reverse patches on a new version"
+}

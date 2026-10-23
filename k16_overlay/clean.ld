@@ -1,0 +1,1 @@
+SECTIONS { . = 0x081bd000; .text : { *(.text*) *(.rodata*) } /DISCARD/ : { *(.ARM.exidx*) *(.ARM.extab*) *(.comment*) } }

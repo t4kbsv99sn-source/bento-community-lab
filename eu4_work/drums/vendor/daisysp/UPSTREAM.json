@@ -1,0 +1,16 @@
+{
+  "repository": "https://github.com/daisyaudio/DaisySP",
+  "commit": "2c72eaf9eac5fc0dca1919d65d606da907832618",
+  "original_sha256": {
+    "Source/Drums/synthbassdrum.cpp": "151345fed1088f8a6e5379522a62a6dfc9a43e29bb014c590bc8dea8f6a34a7d",
+    "Source/Drums/synthbassdrum.h": "d0dcf35534bc0e7e132c6ac5c89a4c23a5cb4017952e1f1c4f3a528adc98d953",
+    "Source/Filters/svf.cpp": "27ff7d834b9c6d705570bec43079c752028c15d4bfb00c97140a42508ec87ce0",
+    "Source/Filters/svf.h": "97356a57d038421c5df461d22de2c2ad02b27e92067c65275791da4831620bca",
+    "LICENSE": "ae36576d7394109775a8cc86c31c94f016de256526e86d11ee554ef25d429570"
+  },
+  "changes": [
+    "Freestanding dsp.h subset and math shims",
+    "Cache pitch/decay/tone coefficients once per render configuration instead of recomputing powf each sample"
+  ],
+  "licence": "MIT"
+}

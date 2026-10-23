@@ -1,0 +1,15 @@
+# EU6 integration from maintainer-confirmed EU5
+
+EU5 main hash da6cb63772f52eb7f191374368980baba9b62365a227b0635da8b82ca278d6ed; device hash not independently read. The maintainer confirms visuals, generator and hi-hat sound. EU6 makes native notes authoritative for enabled pads after a one-time materialization on Right.
+
+EuPad.pattern bit 26 marks native-note-backed patterns. Existing layout, capacities, magic and XML fields remain; the validation mask now permits bit 26. Legacy unmarked loaded settings retain procedural playback until opened/migrated. Existing native-note save/restore and per-note lock XML remain. Older mod firmware rejects marked generator settings and can play the native pattern as manual.
+
+UI uses the previously tested EU1 native bulk note APIs to generate/edit the current drum. Preflight checks 511-note capacity, IDs and the checked native heap allocation before mutation. Existing notes at retained positions keep ID, velocity, condition, timing value and lock payload. Shrinking/regeneration removes that drum's other positions within the supported 256 steps. Other drums are untouched. Global Velocity updates the drum's native note records in one native undo gesture. PROJ+Left keeps the edited notes and disables generation; it no longer restores a hidden original manual pattern.
+
+No extra fixed SRAM, stack/MPU change or voice layout change. The existing one-time12KiB EU1 scratch allocation is now used from the native C6..C8 M4 pool. Settings publish only after native-note generation succeeds. UI projects the selected pad length/page into view fields only, preserving the model's shared clip length. Existing held-step APIs now find real notes. Selected steps use the normal edit bank; Right clears inspection and restores generator controls. The grid reads actual notes and shows lock/selection markers, including when the normal encoder bank is selected.
+
+M7 scans the native note cursor once per grid boundary for all active pads. For marked pads, absent notes mean rests, added notes play, velocity and lock words come from the actual note. Custom A:B conditions count independent pad cycles; probability calls the original native random source/threshold rule. Native events for controlled pads stay suppressed to avoid duplicates. The cursor is never mutated. Legacy unmarked pads keep their EU5 procedural path.
+
+Microtiming and repeats retain the old generated-grid limitation; their saved native values are preserved through regeneration but are not scheduled independently. Generator setting Undo and clip Copy/Move/Delete integration remain pending. Native pattern edits are Undoable and save with the normal project.
+
+Test fixtures execute real native note containers, IDs, insertion/deletion, selected-note reads, velocity/lock writes and M7 routing. GUI-parent E7/E9 dispatch/engine queue transport are substituted; tap messages come from real native button code and are applied with native bulk note APIs. These tests do not simulate the complete physical display/SD/audio deadlines. Drum DSP source and emitted synth cave are identical to EU5.

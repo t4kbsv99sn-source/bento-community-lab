@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "module": "tracks-pad-select",
+  "module_version": "0.3.0",
+  "firmware_version": "1.6.1",
+  "stock_sha256": "14475e9d5068f5659d0fe0b00fc1278c1479c43ed9fda3d40654d5f3a7a6bbb3",
+  "status": "offline-emulator-only",
+  "pad_numbering": {
+    "top": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "bottom": [
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ]
+  },
+  "stock_hooks": {
+    "pad": {
+      "address": "0x0808d1fe",
+      "original": "9c42f6d0"
+    },
+    "consumer": {
+      "address": "0x0813f98c",
+      "original": "a5f11103"
+    }
+  },
+  "source_sha256": {
+    "consumer.s": "9b904aa7b6e5562b4afe228564f6c523d3d6ec4b2e145cc875673fad82a24304",
+    "input.s": "8d0a44471356e3becc451e452069728914e814d5ad69ba9ee48cee0d7b66a249",
+    "module.json": "341a8e5c635c3c590513d604effaddeaa2dbf464bb21347da08454594fe92438",
+    "startup.s": "eb5fc04bd98eb71c94fe7bb4c0ae1e8e9512ada2241b97e9acdd8b7658d05837"
+  },
+  "assembled_emulator_blocks": {
+    "input": {
+      "emulator_address": "0x24060000",
+      "bytes": 288,
+      "sha256": "8602e86c5d96be84d0fc26f97cb516941584ce18a2006b2b6a2e3c56b07175e3"
+    },
+    "consumer": {
+      "emulator_address": "0x24061000",
+      "bytes": 139,
+      "sha256": "510b23bb08ac6170116516aa6679a903f957be911baa52ba2787f468cfefe435"
+    }
+  },
+  "device_allocations": {
+    "code": null,
+    "state": null
+  },
+  "installation_authorized_by_this_audit": false,
+  "firmware_bytes_written": 0,
+  "porting_rule": "New firmware requires a new reviewed profile; unknown hashes are rejected",
+  "removal_rule": "Rebuild from exact original firmware with this module omitted; never blindly reverse patches on a new version"
+}
