@@ -58,7 +58,7 @@ The contributors cannot guarantee the safety or reliability of experimental buil
 
 ## A note on how it's made
 
-Much of the code was written with AI coding assistants and then tried out on a real Bento.
+This thing runs on Enthusiasm and Vibe. Much of the code was written with AI coding assistants (Codex and Claude) and then tried out on a real Bento.
 
 ## Related projects
 
