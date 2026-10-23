@@ -1,13 +1,14 @@
 /* BENTO_MOD L7: two native spare Event encoders, lossless note-owned locks. */
 #include "step_lock_shared.h"
 #include "seq_bank.h"
+#include "../../chord_work/device.h"
 #define MODEL ((void*)0x30024b00u)
 #define PICKER 0x1dau
 #define PICKER2 0x1e4u
 static u32 picker(u32 i){return i?PICKER2:PICKER;}
 #define MAGIC 0x47555042u
 typedef struct {u32 seq,drum,kind,kind2;} Target;
-typedef struct {u32 magic,view,seq,drum,kind,shift,pick,changed,error,next,selection,kind2,pick2,changed2;Target targets[64];u32 pool,pool_count,select_mode,selected[8],swallowed;} UI;
+typedef struct {u32 magic,view,seq,drum,kind,shift,pick,changed,error,next,selection,kind2,pick2,changed2;Target targets[64];u32 pool,pool_count,select_mode,selected[8],swallowed;void *chord_state;} UI;
 #define U ((volatile UI*)0x24048000u)
 _Static_assert(sizeof(UI)<=0x480,"Lock UI overlaps choice table");
 #define LOCK_COND_KEY 0x198u
@@ -32,6 +33,7 @@ static void setkind(u32 i,u32 k){if(i)U->kind2=k;else U->kind=k;}
 static u32 pick(u32 i){return i?U->pick2:U->pick;}
 static void setpick(u32 i,u32 k){if(i)U->pick2=k;else U->pick=k;}
 static void init(void){if(U->magic!=MAGIC){for(u32 i=0;i<sizeof(UI)/4;i++)((volatile u32*)U)[i]=0;U->magic=MAGIC;}}
+void **chord_state_slot(void){init();return (void**)&U->chord_state;}
 static int supported(void *v){return v && (!B(v,0x113e0)||seq_eu_active(v)) && W(v,0x113e4) && W(v,0x113dc) && W(v,0x11400)<16 && FN(0x08133f7c,u32(*)(void*,void*))(MODEL,(u8*)v+0x113e8)==14;}
 static int snapshot(void *v,u32 *e){return FN(0x0815ba04,int(*)(void*,void*))(v,e);}
 static void remember(void){
@@ -289,6 +291,7 @@ __attribute__((used,retain)) void seq_selection_reset(void *v){if(!supported(v))
 /* EU9: persistent header actions are separate from the popup definitions.
  * Native header has six 48-byte action records at +74, not the F9/FA list. */
 __attribute__((used,retain)) int seq_toolbar(void *model,void *out,int native_changed){
+ native_changed=chord_toolbar(model,out,native_changed);
  if(B(model,0x12c)!=0x27 || U->magic!=MAGIC || !supported((void*)U->view))return native_changed;
  int undo=-1,empty=-1;
  for(u32 i=0;i<6;i++){u32 k=H(out,0x74+i*48+44);if(k==0x1051){

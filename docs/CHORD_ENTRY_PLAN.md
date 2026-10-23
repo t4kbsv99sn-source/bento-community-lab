@@ -1,4 +1,4 @@
-# Piano-roll chord entry — proposal, not implemented
+# Piano-roll chord entry — approved design; C0 core only
 
 Goal: insert an entire chord quickly using the pads, encoders and touchscreen, then edit/save it as ordinary Bento notes. This is an editing tool, not a new playback engine.
 
@@ -18,13 +18,13 @@ Add an on-screen Chord toggle in the piano roll for pitched tracks. Keep the exi
 | 1 | Chord type |
 | 2 | Voicing |
 | 3 | Inversion |
-| 4 | Octave/register |
+| 4 | Strum |
 | 5 | Start position |
 | 6 | End position |
 | 7 | Velocity |
 | 8 | Grid resolution |
 
-The pads choose the root. The screen also offers root/octave selection, the same parameter choices, Insert and Cancel. A separate Preview control auditions the proposed chord on request; editing positions/voicings does not automatically play notes. This follows the earlier preference for explicit audition.
+The pads choose the root. The screen also offers root/octave selection, the same parameter choices, Insert and Cancel. Pressing a root pad immediately auditions the full chord; release stops its owned notes. Encoder edits update the visual preview. A separate Preview control loops a progression. Audition does not insert notes.
 
 ## Initial musical choices
 
@@ -48,3 +48,9 @@ Automatic voice leading, scale-derived harmony, strum, humanization, chord detec
 ## Implementation path
 
 First verify the pitched-track piano-roll note container, bulk-add, coordinate/time/pitch mapping, selection and Undo path. The Euclidean work already uses native bulk-note edits, but drum-note semantics cannot be assumed to be identical to pitched notes. Build the preview and bounded insertion separately, then attach the native controls and touchscreen handles. Test round trips, capacity failures, overlapping notes, clip boundaries, pitch limits and one-gesture Undo before a device build.
+
+## Approved progression additions
+
+Single and Progression are separate banks. Progression presets create degree-based phrases in the selected key/scale; chord blocks show both degree and actual name and select a whole chord. A root pad also supplies the progression register. Explicit quality/inversion overrides remain protected. Live preview edits apply on the next chord boundary. Scale changes adapt degree roots and nonoverridden qualities. Insert commits native notes; Update edits the selected group; a complete gesture takes one Undo. Later additions separate harmony from rhythm and may offer substitutions, protected chords and user presets.
+
+C0 implementation status is in chord_work/README.md. No Chord button, native pad audition routing, saved group membership or clocked preview has been installed.

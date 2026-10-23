@@ -1,6 +1,7 @@
 #include "fx_shared.h"
 #include "live_ui.h"
 #include "seq_bank.h"
+#include "../../chord_work/device.h"
 typedef struct {u32 handle;int values[18];} Entry;
 typedef struct {u32 magic,active,selected,view,nav,held,serial,pending_count;Entry live[8],pending[8];char titles[3][40];u32 armed,pressed,down_tick,up_tick,last_button;Euclid eu;u32 step_view,eu_mode,draw_pattern,draw_head,draw_pad,draw_seq;} Ui;
 #define U ((Ui*)UI_ADDR)
@@ -84,8 +85,9 @@ __attribute__((used)) int fx_dispatch(void *m,u32 code,u32 context,u32 index){
  }
  return 0;
 }
-__attribute__((used)) void fx_nav(void *m,u32 page){(void)m;(void)page;init();if(!U->nav){U->active=0;U->view=0;if(page!=0x27){U->eu_mode=0;U->step_view=0;}}}
+__attribute__((used)) void fx_nav(void *m,u32 page){chord_nav(m,page);(void)m;(void)page;init();if(!U->nav){U->active=0;U->view=0;if(page!=0x27){U->eu_mode=0;U->step_view=0;}}}
 __attribute__((used)) int fx_header(void *m,void *handle,void *out,u32 mode,u32 caller){
+ if(chord_header(m,handle,out,mode,caller))return 1;
  (void)m;(void)handle;(void)mode;init();
  if(!U->active||(caller&~1u)!=0x08145f22u)return 0;
 
@@ -98,12 +100,14 @@ __attribute__((used)) int fx_header(void *m,void *handle,void *out,u32 mode,u32 
  H(out,0x34)=fx_keys[18];H(out,0x36)=fx_keys[16];H(out,0x38)=fx_keys[17];return 1;
 }
 __attribute__((used)) int fx_get(void *m,void *handle,u32 key,void *out){
+ if(chord_get(m,handle,key,out))return 1;
  (void)m;(void)handle;init();if(U->active&&out&&key==0){W(out,0)=0;return 1;}
 
  int i=key_index(key);if(i<0||!U->active||!out)return 0;
  W(out,0)=i==18?U->selected+1:(u32)U->live[U->selected].values[i];return 1;
 }
 __attribute__((used)) int fx_event(void *v,void *event){
+ if(chord_event(v,event))return 1;
  init();if(!U->active||U->view!=(u32)v||H(event,0)!=0xcf)return 0;
 
  int i=key_index(W(event,8));if(i<0)return 0;int value=(int)W(event,12);if(value<fx_lo[i])value=fx_lo[i];if(value>fx_hi[i])value=fx_hi[i];

@@ -314,3 +314,50 @@ Native model/SD and parent services are substituted in targeted fixtures. Physic
 The first full run's visual suite silently ended without a summary inside Unicorn callback cleanup despite exit 0. The completion gate correctly rejected it. Retaining probe instances until process exit fixes the harness; the complete 10-test visual recheck passes. Production firmware bytes were unaffected. Other suites completed normally; no failing assertion was waived.
 
 Scope: sample ADSR hidden for drum synth pickers, engine-specific targets retained, old locks preserved. Modulation-matrix engine destinations remain unfinished; evidence and next steps are in docs/DRUM_MOD_MATRIX_PLAN.md. Chord insertion is planned in docs/CHORD_ENTRY_PLAN.md and not implemented.
+
+## Chord composer C0 — source checkpoint, NOT firmware
+
+Maintainer approved chord/progression design and requested implementation. A separate feature/chord-composer branch adds the portable musical core, audition note-ownership logic and a standalone native insertion proof. 26 software tests pass, including host/Cortex-M4 parity across 720 combinations and native note/ID/publish tests. Settings codec exists; saved native-note group membership does not. No screen controls, pad routing, clocked live preview or project integration are installed. No new firmware is delivered. EU10 main SHA remains 4ed81f1604459f338624fcfd4a22e40b29b992f4e9df4303de1a0564b8b32a37. See chord_work/README.md and docs/CHORD_INTEGRATION_EVIDENCE.md for exact remaining work and fixture limits.
+
+## CH1 / 1.6H1 — installable chord/progression insertion test
+
+First device firmware connects C0 to a native three-row editor, a persistent
+Chord header action and Insert/Back. Fifteen chord types, voicings/inversions,
+strum, start/end, velocity/grid, twelve progression presets, root/key/five scales,
+per-chord edit selection, duration and automatic voice leading are available.
+Inserted chords are ordinary native notes with one native Undo snapshot.
+No automatic flashing; device results remain pending.
+
+284 checks passed across 15 suites (249 inherited firmware checks plus 35 chord
+core/native/UI checks). Native widgets and encoder events execute, as do native
+note containers, IDs and publication. Model/navigation/font, Undo storage and
+engine-queue services remain fixtures; hardware startup/display/audio/SD/Undo
+must still be verified. The earlier visual-suite process again truncated once;
+the completion gate rejected it. A fresh complete run passed all 10 tests. A
+fresh-process runner is provided for future native-runtime isolation. No test
+assertion was skipped or weakened.
+
+Two independent isolated builds match byte for byte.
+Main SHA256: 20c36100c2d44d3d0743e8e9ab7833eafe6c3517b68b0eca688d9e01dc3e9bca
+Size:1,610,892 bytes. Label:1.6H1.
+Controller SHA256:8100906327093463fb58f531ee28583423a9881ea3a7d5b77874a7700735e99d.
+Entire M7 application is byte-identical to EU10. Exact stock/K16 reversibility,
+four-byte alignment, code bounds, unchanged vectors/recovery regions and source
+inputs verified. No new fixed RAM/MPU/stack reservations; bootloader untouched.
+Native descriptor allocation is3E60 bytes/499 entries; proposed out-of-bounds
+keys were corrected before release, with a canary regression test.
+
+This is insertion-first. No pad chord audition, outlined preview, looping live
+preview, saved chord groups, whole-chord block selection or Update is installed.
+Draft controls are not saved; inserted notes use normal native project storage.
+Keep the approved full workflow as the next integration work, rather than
+presenting this test as its completion.
+
+
+## CH1 maintainer feedback
+
+Maintainer reports that neither Chord nor Select is visible on the device. CH1's
+software header fixtures therefore did not establish visibility in the real UI.
+The shared header generation/application path is under investigation; no fix is
+confirmed and no replacement firmware has been built. Display work is paused at
+the maintainer's request.
