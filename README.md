@@ -1,4 +1,4 @@
-# Bento Community Lab · Bento Playground
+# Bento Community Lab 
 
 An experimental community-driven project exploring firmware modifications, workflow improvements, new instruments, and expanded sequencing capabilities for the **1010music Bento**.
 
