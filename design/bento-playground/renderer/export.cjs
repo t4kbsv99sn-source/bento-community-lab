@@ -1,0 +1,8 @@
+// Optional export tool: node renderer/export.cjs. Requires sharp only for PNGs.
+const fs=require('node:fs'),path=require('node:path'),D=require('./design.js');
+require('./views.js');
+const root=path.resolve(__dirname,'..');fs.mkdirSync(path.join(root,'screens'),{recursive:true});
+async function main(){let sharp;try{sharp=require('sharp');}catch{if(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES)sharp=require(require.resolve('sharp',{paths:[process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES]}));}
+ for(const [name,page,variant] of [['01-oneshot','seq','bar'],['01-oneshot-send','seq','send'],['02-motion','auto'],['03-macros-concept','macro'],['04-performance-p19','perf'],['05-components','kit'],['06-tracks','tracks'],['07-mixer','mixer'],['08-chord','chord'],['09-euclid','euclid'],['10-meleuclid','meleuclid'],['11-melodic','melodic'],['12-sequence','sequence'],['13-launcher','launcher'],['14-fx','fx'],['15-matrix','matrix'],['16-sample','sample']]){let s=D.defaultState();s.page=page;s.variant=variant||'bar';s.lockTarget=variant==='send'?'send':'filter';s.fxMode=variant==='comp'?'Compressor':variant==='clip'?'Soft Clip':'EQ';s.play=page==='seq'||variant==='comp'||variant==='clip';let out=page==='kit'?D.sheet():D.render(s);fs.writeFileSync(path.join(root,'screens',name+'.svg'),out);if(sharp)await sharp(Buffer.from(out)).png().toFile(path.join(root,'screens',name+'.png'));}
+ fs.writeFileSync(path.join(root,'assets','tokens.json'),JSON.stringify(D.T,null,2));console.log('Exported 17 editable SVG screens'+(sharp?' and PNGs.':'. Install sharp for PNGs.'));}
+main().catch(e=>{console.error(e);process.exit(1)});

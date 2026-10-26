@@ -7,6 +7,11 @@ typedef struct {u32 seq,owner,pad,steps,hits,rotate,velocity,preview,scratch,val
 #define EU_MEL 0x10000u
 static inline int eu_mel(const Euclid *e){return (e->preview&EU_MEL)!=0;}
 static inline u32 eu_mel_pitch(const Euclid *e){return e->preview&127u;}
+/* P17: melodic rows record the clip's note unit in preview bits 20..23: 0 = step
+   mode (960 per step, clip flag +38 set); i = absolute ticks with Step Len i-1
+   (960 per quarter; owner on P16: only the first notes played because a
+   16-step pattern at 960 per step spans four bars of an absolute clip). */
+static inline u32 eu_unit(const Euclid *e){static const u16 q[15]={30720,15360,7680,3840,1920,1280,960,640,480,320,240,160,120,80,60};u32 i=(e->preview>>20)&15u;return (e->preview&EU_MEL)&&i?q[i-1]:960u;}
 static inline u32 eu_mel_gate(const Euclid *e){u32 g=(e->preview>>8)&127u;return g<1?4:g>64?64:g;}
 enum {EU_OK,EU_STALE,EU_FULL,EU_MEMORY,EU_INVALID,EU_SAME,EU_USED};
 int eu_hit(u32 step,u32 steps,u32 hits,u32 rotate);

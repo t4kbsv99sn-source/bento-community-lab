@@ -9,7 +9,7 @@ KEEP=[]
 TEMPLATES=0x08199008;ROOT=0x30034d48
 class Native(Edit):
  def __init__(self,*args,**kwargs):
-  super().__init__(*args,**kwargs);KEEP.append(self)
+  super().__init__(*args,**kwargs);KEEP.append(self);self.call(0x081412ec)
  def ui(self,u,a,n,d):
   if a!=0x0815c27c:self.ret()
  def bubble(self,u,a,n,d):
@@ -62,10 +62,13 @@ class Tests(unittest.TestCase):
   # Select takes the free normal slot directly left of Undo; native records stay put.
   self.assertEqual(p.text(self.slot(out,4)),'Select');self.assertEqual(struct.unpack('<H',p.u.mem_read(self.slot(out,4)+44,2))[0],0x1051)
   self.assertEqual(p.u.mem_read(self.slot(out,4)+0x20,3),b'\0\0\0')
-  for i in [3,5]:self.assertEqual(bytes(p.u.mem_read(self.slot(out,i),48)),native[0x74+i*48:0x74+i*48+48],i)
-  # CH5: Euclidean view tab in slot 0, joined to the native Step/Sequence tab group.
-  self.assertEqual(p.text(self.slot(out,0)),'Euclidean');self.assertEqual(p.u.mem_read(self.slot(out,0)+0x22,1)[0],1)
-  self.assertEqual([p.text(self.slot(out,i)) for i in [1,2]],['Step','Sequence'])
+  # P17 (owner): slot 0 stays free for the on-screen pad selector; the row moved
+  # right: Euclidean, Step, Sequence tabs, Select, Clear (native Clear Seq).
+  self.assertEqual(p.text(self.slot(out,0)),'');self.assertEqual(p.u.mem_read(self.slot(out,0)+0x20,1)[0],1)
+  self.assertEqual([p.text(self.slot(out,i)) for i in [1,2,3,5]],['Euclidean','Step','Sequence','Clear'])
+  self.assertEqual([p.u.mem_read(self.slot(out,i)+0x22,1)[0] for i in range(6)],[0,1,1,1,0,0])
+  for i in [2,3]:self.assertEqual(bytes(p.u.mem_read(self.slot(out,i)+32,16)),native[0x74+(i-1)*48+32:0x74+(i-1)*48+48],i) # native tab ids kept
+  self.assertEqual(struct.unpack('<H',p.u.mem_read(self.slot(out,5)+44,2))[0],0x102c)
   self.assertEqual(p.call(UU['seq_toolbar'],p.model,out,0),0)
   event=0x2002e000;p.w(event,0x1051);p.call(0x0815d600,p.seqview,event)
   self.assertEqual(p.call(UU['seq_toolbar'],p.model,out,0),1);self.assertEqual(p.text(self.slot(out,4)),'Select ON')
@@ -82,7 +85,7 @@ class Tests(unittest.TestCase):
   self.assertEqual(p.u.mem_read(ROOT+0x117c,1)[0],1);p.call(0x0817faf8,ROOT,out)
   self.assertEqual(p.u.mem_read(ROOT+0x117c,1)[0],0)
   self.assertEqual(p.text(select+0x3c+0x31),'Select');self.assertEqual(p.u.mem_read(select+0x30,1)[0],0)
-  self.assertEqual(p.text(undo+0x3c+0x31),'Undo');self.assertEqual(p.u.mem_read(undo+0x30,1)[0],0)
+  self.assertEqual(p.u.mem_read(undo+0x30,1)[0],0);self.assertEqual(p.text(undo+0x3c+0x31),'Clear') # P17: Clear where Undo was
   self.assertEqual(p.r(select+8),p.r(undo+8));self.assertEqual(p.r(select+16),p.r(undo+16));self.assertEqual(p.r(select+4)+p.r(select+12)+2,p.r(undo+4))
   # Unchanged header on the next tick does not re-arm layout.
   out=self.header_data(p);self.native_header(p,out);self.assertEqual(p.u.mem_read(ROOT+0x117c,1)[0],0)
@@ -102,13 +105,13 @@ class Tests(unittest.TestCase):
   root=0xc00d0000;p.call(0x08180198,root);p.call(0x0817faf8,root,out)
   # Native normal header buttons are +54C, each D0 bytes; Select is left of Undo.
   select=root+0x54c+4*0xd0;undo=select+0xd0
-  self.assertEqual(p.text(undo+0x3c+0x31),'Undo');self.assertEqual(p.text(select+0x3c+0x31),'Select')
+  self.assertEqual(p.u.mem_read(undo+0x30,1)[0],0);self.assertEqual(p.text(undo+0x3c+0x31),'Clear');self.assertEqual(p.text(select+0x3c+0x31),'Select')
   self.assertEqual(p.u.mem_read(select+0x30,1)[0],0)
   self.assertEqual(p.r(select+16),p.r(undo+16));self.assertEqual(p.r(select+12),p.r(undo+12));self.assertLess(p.r(select+4),p.r(undo+4))
   self.assertEqual(p.r(select+0x14)&65535,0x1051)
   # Header routes the native release to the active SEQ view; parent is a fixture.
   p.u.mem_write(p.model+0x14c,b'\x00');event=0x2002e000;p.w(event,0x7a);p.w(event+8,0x1051)
-  p.call(0x0817fe70,root,event);self.assertEqual(p.text(p.r(0x30030168+0x8c0+88)),"Select ON")
+  p.call(0x0817fe70,root,event);self.assertTrue(any(p.text(p.r(0x30030168+0x8c0+8+i*20))=="Select ON" for i in range(8) if p.r(0x30030168+0x8c0+4+i*20)==0x1051))
 
  def test_depth_increment_is_five_times_faster_without_speeding_other_controls(self):
   p=self.view();slot=p.seqview+0xebf0+0x38+5*0x468
@@ -127,4 +130,27 @@ class Tests(unittest.TestCase):
   ctx=0x2002f000;p.w(ctx,1);p.w(ctx+4,0x20020000);p.call(UU['eu_glyph_paint'],p.seqview,ctx)
   self.assertEqual(len(paints),6);self.assertEqual([c for r,c in paints],[0xf1]+[0xf2]*5)
   self.assertEqual(paints[0][0][3],16)
+ def test_clear_with_selected_steps_removes_only_those_notes(self):
+  # P20 (owner plan: Clear acts on the selection; header Clear = native Clear Seq 102C).
+  p=Native();p.generated(7,3);test_eu8.Tests().full_view(p);p.call(0x0815c27c,p.seqview);ev=0x2002e000;pad=p.r(p.seqview+0x11400)
+  mine=lambda:sorted(struct.unpack_from('<I',e,4)[0]//960 for e in p.events() if struct.unpack_from('<H',e,2)[0]==pad)
+  steps=mine();self.assertGreaterEqual(len(steps),2,steps)
+  p.w(ev,0x1051);p.call(0x0815d600,p.seqview,ev)
+  for st in steps[:2]:
+   if not p.call(UU['seq_selection_match'],p.seqview,st):p.select(st)
+  sel=[st for st in steps if p.call(UU['seq_selection_match'],p.seqview,st)];self.assertTrue(sel,'nothing selected')
+  others=[e for e in p.events() if struct.unpack_from('<H',e,2)[0]!=pad]
+  p.w(ev,0x102c);p.call(0x0815d600,p.seqview,ev)
+  self.assertEqual(mine(),[st for st in steps if st not in sel])
+  self.assertEqual([e for e in p.events() if struct.unpack_from('<H',e,2)[0]!=pad],others)
+  self.assertFalse(p.call(UU['seq_selection_active'],p.seqview))
+ def test_one_shot_euclidean_view_drops_native_tab_relight(self):
+  # P21 (owner on P20: Step/Sequence flickered while Euclidean was selected).
+  p=self.view();p.call(0x08180198,ROOT);out=self.header_data(p);self.native_header(p,out);p.call(0x0817faf8,ROOT,out)
+  ev=0x2002e000;p.w(ev,0x1055);p.call(0x0815d600,p.seqview,ev)
+  out=self.header_data(p);self.native_header(p,out);p.call(UU['device_header_prepare'],out);p.call(0x0817faf8,ROOT,out)
+  step=ROOT+0xa2c+2*0xd0;self.assertEqual(p.u.mem_read(step+0xac,1)[0],0)
+  slot13=p.r(0x081b3680+13*4);E=0x2002f000;p.u.mem_write(E,struct.pack('<HH4I',0x68,0,0,0x49,1,0));p.call(slot13,ROOT,E)
+  self.assertEqual(p.u.mem_read(step+0xac,1)[0],0)
+  p.call(UU['seq_eu_leave'],p.seqview);p.call(slot13,ROOT,E);self.assertEqual(p.u.mem_read(step+0xac,1)[0],1) # Euclidean left: native
 if __name__=='__main__':gc.disable();unittest.main(verbosity=2)

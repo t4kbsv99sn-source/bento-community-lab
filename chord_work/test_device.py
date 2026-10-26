@@ -71,9 +71,11 @@ class Tests(unittest.TestCase):
   p=Device();self.double(p);self.piano(p,0xcf,KEYS[0],1);self.double(p) # exit, notes stay
   self.double(p);self.assertEqual(p.events().__len__(),3);self.piano(p,0xcf,KEYS[6],90) # velocity edit rewrites same chord
   self.assertEqual(len(p.events()),3);self.assertEqual({struct.unpack_from('<H',e,18)[0] for e in p.events()},{90})
- def test_arrows_outside_live_chord_mode_stay_native(self):
+ def test_arrows_outside_live_chord_mode_step_notes_not_sequences(self):
+  # P17 (owner on P16): Left/Right go to the next note in every piano view; the
+  # native next-sequence call (0815B3EC) is no longer reached from the piano roll.
   seen=[];p=Device();p.u.hook_add(UC_HOOK_CODE,lambda u,a,n,d:seen.append(u.reg_read(UC_ARM_REG_R1)),begin=0x0815b3ec,end=0x0815b3ec)
-  e=0x2002e000;p.u.mem_write(e,struct.pack('<5I',0xae,0,9,0,0));p.call(0x0815b548,p.view,e);self.assertEqual(seen,[1])
+  e=0x2002e000;p.u.mem_write(e,struct.pack('<5I',0xae,0,9,0,0));p.call(0x0815b548,p.view,e);self.assertEqual(seen,[])
  def project_scale(self,p,root,scale):
   # Fixture for model services: project handle lookup and properties 8E/8D.
   def handle(u,a,n,d):p.w(u.reg_read(UC_ARM_REG_R1),0x5c);p.ret(1)
@@ -106,6 +108,17 @@ class Tests(unittest.TestCase):
   self.assertEqual((serial%2,active),(0,1));self.assertEqual(shapes,[[0,4,7]]*12)
   self.piano(p,0xcf,KEYS[0],7);self.assertEqual(self.mail(p)[2],[[0,3,7,10]]*12) # Min7 follows the encoder
   self.double(p);serial,active,_=self.mail(p);self.assertEqual((serial%2,active),(0,0))
+ # P5: one chord per track, shared with the performance page.
+ def shared(self,p):
+  out=0x2002f000;ok=p.call(UU['perf_chord_shared'],p.owner,out,out+4,out+8);return ok,[p.r(out+4*i) for i in range(3)]
+ def test_live_edits_become_the_tracks_shared_chord(self):
+  p=Device();self.project_scale(p,3,1);self.double(p);self.piano(p,0xcf,KEYS[0],7);self.piano(p,0xcf,KEYS[2],1)
+  self.assertEqual(self.shared(p),(1,[7,0,1])) # Min7, Close, 1st inversion
+  self.piano(p,0xcf,KEYS[0],16);self.assertEqual(self.shared(p)[1][0],16) # Diatonic 7 shares as 16
+ def test_empty_clip_starts_from_the_shared_chord(self):
+  p=Device();p.call(UU['perf_chord_share'],p.owner,6,0,0) # Maj7 chosen on the performance page
+  self.double(p);self.assertEqual(self.mail(p)[2],[[0,4,7,11]]*12)
+  self.piano(p,0xcf,KEYS[6],100);self.assertEqual(self.notes(p),[(0,48),(0,52),(0,55),(0,59)])
  def test_diatonic_shape_differs_per_pitch_class(self):
   p=Device();self.project_scale(p,3,1);self.double(p);self.piano(p,0xcf,KEYS[0],15) # C major, Diatonic
   shapes=self.mail(p)[2];self.assertEqual(shapes[0],[0,4,7]);self.assertEqual(shapes[2],[0,3,7]);self.assertEqual(shapes[11],[0,3,6])
@@ -175,17 +188,28 @@ class Tests(unittest.TestCase):
  def sent(self,p):
   log=[];p.u.hook_add(UC_HOOK_CODE,lambda u,a,n,d:log.append(tuple(p.r(u.reg_read(UC_ARM_REG_R1)+o) for o in (0,8,12))),begin=0x0815a598,end=0x0815a598);return log
  def test_bars_encoder_right_of_step_count_in_sequence_tab(self):
-  p=Device();v=p.view;self.steplen(p,6);p.u.mem_write(v+0x125dac,b'\x01');p.call(0x081599bc,v) # Sequence tab, stored Step Len 6 = 1/16, 16 steps
+  # P10 (owner: "set to one bar it's actually four bars"): stored Step Len 10 = 1/16
+  # (the firmware's own names for descriptor 60), so a bar is 16 steps; whole bars.
+  p=Device();v=p.view;self.steplen(p,10);p.u.mem_write(v+0x125dac,b'\x01');p.call(0x081599bc,v)
   self.assertEqual(self.pianokeys(p)[4],0x177);self.assertEqual(p.r(v+0x11bcd0+16),0) # 1 bar
-  log=self.sent(p);self.piano(p,0xcf,0x177,2);self.assertIn((0xcf,0x62,64),log) # 4 bars = 64 sixteenths
-  p.u.mem_write(v+0x125dac,b'\x01');self.steplen(p,3);p.call(0x081599bc,v);log=self.sent(p);self.piano(p,0xcf,0x177,3);self.assertIn((0xcf,0x62,32),log) # stored 3 = 1/4 steps: 8 bars = 32
+  log=self.sent(p);self.piano(p,0xcf,0x177,0);self.assertIn((0xcf,0x62,16),log) # 1 bar = 16 sixteenths
+  log=self.sent(p);self.piano(p,0xcf,0x177,2);self.assertIn((0xcf,0x62,48),log) # 3 bars (whole bars now)
+  log=self.sent(p);self.piano(p,0xcf,0x177,40);self.assertIn((0xcf,0x62,256),log) # 16 bars is the most 256 steps allow
+  p.u.mem_write(v+0x125dac,b'\x01');self.steplen(p,6);p.call(0x081599bc,v);log=self.sent(p);self.piano(p,0xcf,0x177,7);self.assertIn((0xcf,0x62,32),log) # stored 6 = 1/4: 8 bars = 32
+ def test_bars_names_match_the_firmware_step_lengths(self):
+  p=Device();p.registry();d=p.r(0x30031484)+0x60*32;names=[p.text(p.r(p.r(d+8)+4*i)) for i in range(15)]
+  self.assertEqual(names[3],'1 bar');self.assertEqual(names[6],'1/4');self.assertEqual(names[10],'1/16')
  def test_bars_shows_plus_or_minus_when_not_exact(self):
   p=Device();v=p.view;txt=lambda:p.text(p.call(UU['bars_text'],v))
-  p.w(v+0x11cd14,6);p.w(v+0x11cd18,16);self.assertEqual(txt(),'1')
-  p.w(v+0x11cd18,20);self.assertEqual(txt(),'1+');p.w(v+0x11cd18,64);self.assertEqual(txt(),'4');p.w(v+0x11cd18,8);self.assertEqual(txt(),'1-')
+  p.w(v+0x11cd14,10);p.w(v+0x11cd18,16);self.assertEqual(txt(),'1')
+  p.w(v+0x11cd18,20);self.assertEqual(txt(),'1+');p.w(v+0x11cd18,48);self.assertEqual(txt(),'3');p.w(v+0x11cd18,8);self.assertEqual(txt(),'1-')
+ def test_bars_in_native_unscaled_length_mode_are_four_quarters(self):
+  p=Device();v=p.view;p.w(v+0x11cd10,1);p.w(v+0x11cd14,10);p.w(v+0x11cd18,16)
+  self.assertEqual(p.text(p.call(UU['bars_text'],v)),'4')
+  log=self.sent(p);self.piano(p,0xcf,0x177,0);self.assertIn((0xcf,0x62,4),log)
  def test_chord_encoder_8_is_bars(self):
-  p=Device();v=p.view;self.steplen(p,6);self.double(p);self.assertEqual(self.pianokeys(p)[7],0x177)
-  log=self.sent(p);self.piano(p,0xcf,0x177,1);self.assertIn((0xcf,0x62,32),log)
+  p=Device();v=p.view;self.steplen(p,10);self.double(p);self.assertEqual(self.pianokeys(p)[7],0x177)
+  log=self.sent(p);self.piano(p,0xcf,0x177,1);self.assertIn((0xcf,0x62,32),log) # 2 bars
  # CH8 live overlay: the played chord's name while a pad is held.
  def dev(self,p):return p.r(0x24048000+1128)
  def test_held_pad_shows_chord_name_until_release(self):
@@ -228,7 +252,7 @@ class Tests(unittest.TestCase):
   self.assertNotIn(300,[struct.unpack_from('<I',x,12)[0] for x in p.events()])
  def test_live_header_shows_lit_chord_bank_in_free_slot(self):
   p=Device();self.double(p);out=p.toolbar()
-  self.assertEqual(p.text(out+0x74),'Chord 1/2');self.assertEqual(p.u.mem_read(out+0x74+0x21,1)[0],1)
+  self.assertEqual(p.text(out+0x74),'Chord');self.assertEqual(p.u.mem_read(out+0x74+0x21,1)[0],1)
  def test_single_seq_and_slow_or_drum_double_tap_stay_native(self):
   p=Device();self.assertEqual(self.seq(p,0xaf,1000),0);self.seq(p,0xb0,1080);self.assertEqual(self.seq(p,0xaf,1800),0);self.assertFalse(p.navlog)
   p=Device();p.type=14;self.seq(p,0xaf,1000);self.seq(p,0xb0,1080);self.assertEqual(self.seq(p,0xaf,1200),0);self.assertFalse(p.navlog)
@@ -266,4 +290,38 @@ class Tests(unittest.TestCase):
   for i in range(6):p.w(out+0x74+i*48+44,0x1032+i)
   before=bytes(p.u.mem_read(out,0x1c4));self.assertEqual(p.call(UU['chord_toolbar'],p.model,out,0),0);self.assertEqual(bytes(p.u.mem_read(out,0x1c4)),before)
   p.open_editor();p.call(UU['chord_nav'],p.model,2);self.assertEqual(p.call(UU['chord_event'],p.editor,0x2002e000),0)
+ # P24 (owner answers on P23): Position "start / end", Length, ripple, Clear.
+ def full(self,p):return sorted((struct.unpack_from('<I',e,4)[0],struct.unpack_from('<I',e,8)[0],struct.unpack_from('<H',e,16)[0]) for e in p.events())
+ def test_changing_a_chord_keeps_its_length(self):
+  p=Device();self.double(p);self.piano(p,0xcf,KEYS[0],0);self.piano(p,0xcf,KEYS[5],2) # Length 2 beats
+  self.assertEqual({n[1] for n in self.full(p)},{7680})
+  self.pad(p,3,62);self.assertEqual({n[1] for n in self.full(p)},{7680});self.piano(p,0xcf,KEYS[0],1);self.assertEqual({n[1] for n in self.full(p)},{7680})
+ def test_position_moves_the_whole_chord_and_shows_start_and_end(self):
+  p=Device();self.double(p);self.piano(p,0xcf,KEYS[0],0);self.piano(p,0xcf,KEYS[4],2)
+  self.assertEqual({(n[0],n[1]) for n in self.full(p)},{(7680,3840)})
+  r=p.r(0x30031484);names=p.r(r+KEYS[4]*32+8);self.assertEqual(p.text(p.r(names+2*4)),'1.3 / 1.4')
+ def test_proj_plus_position_moves_only_the_end(self):
+  p=Device();self.double(p);self.piano(p,0xcf,KEYS[0],0);p.w(0x24048d68,1);self.piano(p,0xcf,KEYS[4],1);p.w(0x24048d68,0)
+  self.assertEqual({(n[0],n[1]) for n in self.full(p)},{(0,7680)})
+ def test_longer_chord_pushes_later_chords_back_keeping_their_ids(self):
+  p=Device();self.double(p);self.piano(p,0xcf,KEYS[0],0);self.arrow(p,9);self.piano(p,0xcf,KEYS[0],1) # chord 2 at beat 2
+  ids={struct.unpack_from('<I',e,12)[0] for e in p.events() if struct.unpack_from('<I',e,4)[0]==3840}
+  self.arrow(p,0);before=sorted(p.events());self.piano(p,0xcf,KEYS[5],3)
+  self.assertEqual(sorted(p.undo[-1][0]),before) # the (single-level) Undo snapshot is the clip before the whole change
+  later={struct.unpack_from('<I',e,12)[0] for e in p.events() if struct.unpack_from('<I',e,4)[0]==11520}
+  self.assertEqual(later,ids);self.assertEqual({n[1] for n in self.full(p) if n[0]==0},{11520})
+  self.piano(p,0xcf,KEYS[5],1);self.assertEqual(sorted({n[0] for n in self.full(p)}),[0,3840]) # shorter pulls them forward again
+ def test_clear_deletes_the_whole_selected_chord_only(self):
+  p=Device();self.double(p);self.piano(p,0xcf,KEYS[3],3);self.piano(p,0xcf,KEYS[0],0) # 4 rhythm hits
+  self.arrow(p,9);self.piano(p,0xcf,KEYS[0],1);second=[n for n in self.notes(p) if n[0]>=3840]
+  self.arrow(p,0);self.assertEqual(p.call(UU['chord_clear_current']),1)
+  self.assertEqual(self.notes(p),second)
+ def test_tap_on_empty_space_moves_the_cursor_to_that_beat(self):
+  p=Device();self.double(p);self.piano(p,0xcf,KEYS[0],0);g=p.view+0x38;r=0x20016100
+  p.call(0x0817566a,r,g,2*3840,3840,60);x=struct.unpack('<i',p.u.mem_read(r,4))[0]+3
+  self.assertEqual(p.call(UU['chord_live_tap'],g,x),1);self.assertEqual(len(p.events()),3) # nothing written yet
+  self.piano(p,0xcf,KEYS[0],1);self.assertEqual(sorted({n[0] for n in self.notes(p)}),[0,2*3840])
+  p.call(0x0817566a,r,g,0,3840,60);x=struct.unpack('<i',p.u.mem_read(r,4))[0]+3
+  p.call(UU['chord_live_tap'],g,x);self.piano(p,0xcf,KEYS[0],7) # back on the first chord: Min7 replaces it
+  self.assertEqual([n for n in self.notes(p) if n[0]==0],[(0,48),(0,51),(0,55),(0,58)])
 if __name__=='__main__':gc.disable();unittest.main(verbosity=2)

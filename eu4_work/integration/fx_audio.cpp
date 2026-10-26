@@ -3,6 +3,9 @@
 struct Meta {u32 magic,serial,ready;int prior[8][18];u32 handles[8],active[8],calls[8],bad;};
 #define A ((Meta*)META_ADDR)
 static_assert(sizeof(Meta)<=0x340,"Audio metadata overlaps UI state");
+/* Motion's M7 transport latch owns 24041980..2404199F, inside the existing
+ * startup-zeroed M7 metadata reservation. No M4 writer may use this line. */
+static_assert(sizeof(Meta)<=0x2c0,"Audio metadata overlaps motion transport latch");
 static void invalidate(u32 a,u32 end){
  __asm__ volatile("dsb" ::: "memory");
  if(W((void*)0xe000ed14u,0)&(1u<<16))for(;a<end;a+=32)W((void*)0xe000ef5cu,0)=a;

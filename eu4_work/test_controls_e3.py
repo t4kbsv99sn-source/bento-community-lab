@@ -105,9 +105,10 @@ class Tests(unittest.TestCase):
    p=Seq();p.press(0)
    if eu:p.arrow(9);p.press(0)
    p.shift();p.encoder(0x1da,8);p.shift(False);p.encoder(KEYS[0],80);self.assertEqual(p.stored(),word(20,80))
-   p.display();self.assertIn(('caption','1040 Hz'),p.screen)
+   p.display();self.assertIn(('caption','424 Hz'),p.screen)
  def test_synth_lock_displays_same_hz_percent_values_as_instrument_editor(self):
-  for model,k,raw,text in [(1,12,80,'80 Hz'),(3,20,80,'1040 Hz'),(5,25,80,'956 Hz')]:
+  # P10: the 909 Snare's Tune is 140 Hz x 2^(v/50) (80 -> 424 Hz; was 80+12v).
+  for model,k,raw,text in [(1,12,80,'80 Hz'),(3,20,80,'424 Hz'),(5,25,80,'956 Hz')]:
    p=Seq(model);p.press(0);p.shift();p.encoder(0x1da,8);p.shift(False);p.encoder(KEYS[0],raw);p.display()
    self.assertEqual(p.stored(),word(k,raw));self.assertIn(('caption',text),p.screen)
    p.shift();p.encoder(0x1da,9);p.shift(False);p.encoder(KEYS[1],73);p.display();self.assertIn(('caption','73%'),p.screen)

@@ -50,7 +50,7 @@ class SyntheticSnareDrum
     /** Trigger the drum */
     void Trig();
     // EU4: stack-owned block constants; voice ABI/state size stays unchanged.
-    struct BlockCoefficients {float drum_decay,snare_decay,fm_decay,drum_level,snare_level;};
+    struct BlockCoefficients {float drum_decay,snare_decay,fm_decay,drum_level,snare_level,reset_noise_amount;};
     BlockCoefficients PrepareBlock();
     float ProcessPrepared(const BlockCoefficients &c, bool trigger=false);
 

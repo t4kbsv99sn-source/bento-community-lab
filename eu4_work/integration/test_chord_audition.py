@@ -37,7 +37,7 @@ class Pads(Fixture):
 def pitches(posts,kind,handle=TRACK):return [p for t,h,p,v in posts if t==kind and h==handle]
 class Tests(unittest.TestCase):
  def test_without_chord_mode_a_pad_plays_its_single_native_note(self):
-  p=Pads();on=p.press(8);self.assertEqual(pitches(on,2),[48]);self.assertEqual(p.pub(8),0)
+  p=Pads();on=p.press(8);self.assertEqual(pitches(on,2),[48]);self.assertEqual(p.pub(8),0x80|48) # P21: every pad publishes its pitch (Euclid row Note)
   self.assertEqual(pitches(p.release(8),3),[48])
  def test_chord_mode_pad_plays_whole_chord_on_its_pitch_and_releases_it(self):
   p=Pads();p.mail([0,4,7]);on=p.press(10) # pad 10 -> idx 2 -> D3 (50)

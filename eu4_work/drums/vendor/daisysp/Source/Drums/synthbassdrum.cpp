@@ -20,8 +20,7 @@ float SyntheticBassDrumClick::Process(float in)
     lp_ += (error > 0 ? .5f : .1f) * error;
 
     fonepole(hp_, lp_, 0.04f);
-    filter_.Process(lp_ - hp_);
-    return filter_.Low();
+    return filter_.ProcessLow(lp_ - hp_); /* Bento CH12: lean, identical */
 }
 
 void SyntheticBassDrumAttackNoise::Init()

@@ -85,7 +85,12 @@ SyntheticSnareDrum::BlockCoefficients SyntheticSnareDrum::PrepareBlock()
 
     drum_lp_.SetFreq(3.0f * f0_ * sample_rate_);
 
-    return {drum_decay, snare_decay, fm_decay, drum_level, snare_level};
+    /* Bento CH12: constant per block, same expression as before. */
+    float reset_noise_amount = (0.125f - f0_) * 8.0f;
+    reset_noise_amount       = fclamp(reset_noise_amount, 0.0f, 1.0f);
+    reset_noise_amount *= reset_noise_amount;
+    reset_noise_amount *= fm_amount_;
+    return {drum_decay, snare_decay, fm_decay, drum_level, snare_level, reset_noise_amount};
 }
 float SyntheticSnareDrum::ProcessPrepared(const BlockCoefficients &c, bool trigger)
 {
@@ -131,10 +136,7 @@ float SyntheticSnareDrum::ProcessPrepared(const BlockCoefficients &c, bool trigg
     // leaving Q40's collector and resetting all oscillators allow some
     // intermodulation.
     float reset_noise        = 0.0f;
-    float reset_noise_amount = (0.125f - f0_) * 8.0f;
-    reset_noise_amount       = fclamp(reset_noise_amount, 0.0f, 1.0f);
-    reset_noise_amount *= reset_noise_amount;
-    reset_noise_amount *= fm_amount_;
+    const float reset_noise_amount = c.reset_noise_amount;
     reset_noise += phase_[0] > 0.5f ? -1.0f : 1.0f;
     reset_noise += phase_[1] > 0.5f ? -1.0f : 1.0f;
     reset_noise *= reset_noise_amount * 0.025f;
@@ -170,14 +172,11 @@ float SyntheticSnareDrum::ProcessPrepared(const BlockCoefficients &c, bool trigg
     drum += DistortedSine(phase_[1]) * 0.25f;
     drum *= drum_amplitude_ * drum_level;
 
-    drum_lp_.Process(drum);
-    drum = drum_lp_.Low();
+    drum = drum_lp_.ProcessLow(drum); /* Bento CH12: lean, identical */
 
     float noise = rand() * kRandFrac;
-    snare_lp_.Process(noise);
-    float snare = snare_lp_.Low();
-    snare_hp_.Process(snare);
-    snare = snare_hp_.High();
+    float snare = snare_lp_.ProcessLow(noise);
+    snare = snare_hp_.ProcessHigh(snare);
     snare = (snare + 0.1f) * (snare_amplitude_ + fm_) * snare_level;
 
     // BENTO_MOD K15: accent-dependent punch on the existing sound only.

@@ -60,11 +60,17 @@ __attribute__((used)) void eu_view_capture(void *v){
  if(n&&n<=256){W(v,0x113f8)=n;if(W(v,0x113f4)>=n)W(v,0x113f4)=0;}
 }
 u32 live_record_check(void);
+int perf_dispatch(void*,u32,u32);void drum_menu_tick(void);void perf_tick(void);void perf_pad(u32,u32);void perf_nav(u32);int perf_header(void*,u32);int perf_get(void*,void*,u32,void*);int perf_event(void*,void*);void perf_save(void*,void*);void perf_load(void*,void*);
 void chord_track_tick(void);
 __attribute__((used)) int fx_dispatch(void *m,u32 code,u32 context,u32 index){
  (void)context;init();
  live_record_check(); /* CH7: recorded hits on a Euclid pad switch it to Manual */
  chord_track_tick(); /* CH9: chord pads follow the chord-mode track in every view */
+ perf_pad(code,index); /* P7: which pad played the chord (name, Smooth) */
+ if((code==0xaf&&index==15)||code==0x8f){extern void melodic_register_tracks(void);melodic_register_tracks();}
+ perf_tick(); /* P1: the selected track's fixed velocity for M7 */
+ if(perf_dispatch(m,code,index))return 1;
+ drum_menu_tick(); /* P6: Drum Synth entry in one-shot pad menus */ /* P1: PROJ+PLAY performance page, PROJ+Left settings */
  if(code==0xb0&&index==U->held&&U->held){U->held=0;return 1;}
  /* Native HAL_GetTick (081152C0) reads this millisecond counter. A first
     TRACKS press immediately follows K16; only a second short tap is consumed.
@@ -72,9 +78,10 @@ __attribute__((used)) int fx_dispatch(void *m,u32 code,u32 context,u32 index){
  u32 tick=W((void*)0x3001fe2cu,0);
  /* CH8 (owner): K16's hold MIXER/LAUNCH returns to the previous view on release
     when the hold was used (a pad). An encoder turn (message AB) while holding
-    now counts as use too, e.g. changing track volume. K16 state 24048CC0:
+    now counts as use too, e.g. changing track volume. P26: a pad press (AC) too
+    (LAUNCH hold: the native Launch page plays the pad's clip, then returns). K16 state 24048CC0:
     {magic, button, used, ...}. */
- if(code==0xab&&W((void*)0x24048cc0u,0)==0x354d5442u){u32 held=W((void*)0x24048cc0u,4);if(held==3||held==5)W((void*)0x24048cc0u,8)=1;}
+ if((code==0xab||code==0xac)&&W((void*)0x24048cc0u,0)==0x354d5442u){u32 held=W((void*)0x24048cc0u,4);if(held==3||held==5)W((void*)0x24048cc0u,8)=1;}
  /* CH3: SEQ (index 11) double-tap on the pitched piano roll opens Chord. */
  if((index!=2&&index!=11) || (code!=0xaf&&code!=0xb0)){
   if(code==0xaf||code==0xb0||code==0xfe){U->armed=0;if(U->pressed)U->pressed=2;}return 0;
@@ -101,8 +108,9 @@ __attribute__((used)) int fx_dispatch(void *m,u32 code,u32 context,u32 index){
 }
 extern void piano_eu_nav(u32);
 extern void seq_auto_arm(u32);
-__attribute__((used)) void fx_nav(void *m,u32 page){chord_nav(m,page);piano_eu_nav(page);seq_auto_arm(page);(void)m;(void)page;init();if(!U->nav){U->active=0;U->view=0;if(page!=0x27){U->eu_mode=0;U->step_view=0;}}}
+__attribute__((used)) void fx_nav(void *m,u32 page){perf_nav(page);chord_nav(m,page);piano_eu_nav(page);seq_auto_arm(page);(void)m;(void)page;init();if(!U->nav){U->active=0;U->view=0;if(page!=0x27){U->eu_mode=0;U->step_view=0;}}}
 __attribute__((used)) int fx_header(void *m,void *handle,void *out,u32 mode,u32 caller){
+ if(perf_header(out,caller))return 1;
  if(chord_header(m,handle,out,mode,caller))return 1;
  (void)m;(void)handle;(void)mode;init();
  if(!U->active||(caller&~1u)!=0x08145f22u)return 0;
@@ -115,14 +123,18 @@ __attribute__((used)) int fx_header(void *m,void *handle,void *out,u32 mode,u32 
  for(u32 i=0;i<16;i++)H(out,0x14+i*2)=fx_keys[i];
  H(out,0x34)=fx_keys[18];H(out,0x36)=fx_keys[16];H(out,0x38)=fx_keys[17];return 1;
 }
+int analog_get(u32,void*);
 __attribute__((used)) int fx_get(void *m,void *handle,u32 key,void *out){
+ if(perf_get(m,handle,key,out))return 1;
  if(chord_get(m,handle,key,out))return 1;
+ if(analog_get(key,out))return 1;
  (void)m;(void)handle;init();if(U->active&&out&&key==0){W(out,0)=0;return 1;}
 
  int i=key_index(key);if(i<0||!U->active||!out)return 0;
  W(out,0)=i==18?U->selected+1:(u32)U->live[U->selected].values[i];return 1;
 }
 __attribute__((used)) int fx_event(void *v,void *event){
+ if(perf_event(v,event))return 1;
  if(chord_event(v,event))return 1;
  init();if(!U->active||U->view!=(u32)v||H(event,0)!=0xcf)return 0;
 
@@ -135,11 +147,11 @@ static void attr(void *params,const char *name,u32 value){void *a=FN(0x08109cdc,
 static int read(void *params,const char *name,u32 *value){void *a=params?FN(0x08109c64,void*(*)(void*,const char*))(params,name):0;return a&&!FN(0x08109566,int(*)(void*,void*))(a,value);}
 static void attrname(char name[16],u32 i){const char *s="bento_fx_v1_00";u32 j=0;do{name[j]=s[j];}while(s[j++]);name[12]='0'+i/10;name[13]='0'+i%10;}
 __attribute__((used)) void fx_save(void *object,void *params){
- live_save(object,params);init();u32 h=W(object,0x10);if(!h||!params)return;sync();
+ live_save(object,params);perf_save(object,params);init();u32 h=W(object,0x10);if(!h||!params)return;sync();
  for(u32 t=0;t<8;t++)if(U->live[t].handle==h){attr(params,"bento_fx_version",1);for(u32 i=0;i<18;i++){char name[16];attrname(name,i);attr(params,name,(u32)U->live[t].values[i]);}return;}
 }
 __attribute__((used)) void fx_load(void *node,void *object){
- live_load(node,object);if(!node||!object||B(object,4)<14||B(object,4)>22||!W(object,0x10))return;init();
+ live_load(node,object);perf_load(node,object);if(!node||!object||B(object,4)<14||B(object,4)>22||!W(object,0x10))return;init();
  void *params=FN(0x08109268,void*(*)(void*,const char*))(node,"params");u32 ver=0;int valid=read(params,"bento_fx_version",&ver)&&ver==1;
  if(U->pending_count>=8){for(u32 i=1;i<8;i++)U->pending[i-1]=U->pending[i];U->pending_count=7;}
  Entry *e=&U->pending[U->pending_count++];defaults(e,W(object,0x10));
@@ -171,6 +183,8 @@ int seq_eu_tab(void *v){init();if(!drum_view(v))return 0;if(!U->eu_mode)eu_enter
 /* Native Step/Sequence tab pressed: leave the Euclid bank, then native handles it. */
 void seq_eu_leave(void *v){init();if(U->eu_mode&&U->step_view==(u32)v){U->eu_mode=0;FN(0x0815c4b8,void(*)(void*))(v);}}
 int seq_eu_mode(void *v){init();return U->eu_mode&&U->step_view==(u32)v;}
+/* P21: the one-shot Euclidean view is shown (native Step/Sequence lights must stay off). */
+int drum_eu_view(void){init();return B(MODEL,0x12c)==0x27&&U->eu_mode&&U->step_view;}
 extern int seq_auto_take(void*);
 void seq_eu_header(void *v){
  /* CH5: one-shot SEQ always opens in the Euclidean view (owner). */

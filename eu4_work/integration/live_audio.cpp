@@ -5,6 +5,7 @@
 #include "step_lock_shared.h"
 #include "lock_api.h"
 #include "velocity.h"
+#include "melodic_lock_api.h"
 static void invalidate(u32 a,u32 n){__asm__ volatile("dsb" ::: "memory");if(W((void*)0xe000ed14u,0)&(1u<<16))for(u32 end=a+n;a<end;a+=32)W((void*)0xe000ef5cu,0)=a;__asm__ volatile("dsb" ::: "memory");}
 static EuBank *bank(){
  invalidate(EU_CONTROL_ADDR,32);if(EC->magic!=EU_MAGIC||EC->bytes!=sizeof(EuBank)||!eu_memory(EC->pointer,sizeof(EuBank)))return 0;
@@ -31,7 +32,7 @@ static int snapshot(EuBank *b,void *s,u32 row,EuPad *out,u32 *mel,u8 *pitch){
  u32 serial=b->serial,epoch=b->epoch,count=b->count;EuRecord *found=0;
  for(u32 i=0;i<count;i++){EuRecord *r=b->records+i;invalidate((u32)r,32);if(r->owner==W(s,12)&&r->row==row){found=r;break;}}
  if(!found)return 0;invalidate((u32)found,sizeof(*found));u32 rs=found->serial;if(!rs||(rs&1))return 0;
- *mel=eu_record_melodic(found);for(u32 i=0;i<16;i++){EuPad p=found->pads[i];if(!eu_pad_valid(p)){p.pattern=0;p.velocity=0;}out[i]=p;pitch[i]=(u8)eu_record_pitch(found,i);}
+ *mel=(u32)eu_record_melodic(found)|(found->reserved[0]&0xf00u);for(u32 i=0;i<16;i++){EuPad p=found->pads[i];if(!eu_pad_valid(p)){p.pattern=0;p.velocity=0;}out[i]=p;pitch[i]=(u8)eu_record_pitch(found,i);}
  __asm__ volatile("dmb" ::: "memory");invalidate((u32)found,32);invalidate((u32)b,32);
  return rs==found->serial&&serial==b->serial&&epoch==b->epoch;
 }
@@ -41,19 +42,19 @@ extern "C" __attribute__((used,retain)) void live_restart(void *s){
 extern "C" __attribute__((used,retain)) int live_skip(void *s,u32 pad,u32 pitch){
  EuBank *b=bank();if(!b)return 0;EuRuntime *r=runtime(b,s,0);
  if(!r||!r->ready||r->epoch!=b->epoch||r->owner!=W(s,12)||(int)r->row!=rowof(s))return 0;
- if(r->melodic){(void)pitch;return 0;} /* CH4: melodic rows are a layer on top of the clip */
+ if(r->melodic){for(u32 i=0;i<16;i++)if(eu_enabled(r->pads[i])&&eu_pad_valid(r->pads[i])&&r->pitch[i]==pitch)return 1;return 0;} /* P9: rows own their pitch's clip notes */
  if(pad>=16)return 0;return eu_enabled(r->pads[pad])&&eu_pad_valid(r->pads[pad]);
 }
 /* Native active-note table (sequence+238 count; entry i at sequence+i*16): byte
    +38 active, H+3A pad, W+3C note, i64 +40 end time. The stock renderer sends
    the note-off when the end time passes, exactly as for its own notes. */
-static void mel_play(void *s,u32 pitch,u32 vel,u32 frame,void *clock,void *router,u32 len_ticks,u32 period){
+__attribute__((unused)) static void mel_play(void *s,u32 pitch,u32 vel,u32 frame,void *clock,void *router,u32 len_ticks,u32 period,u32 unit){
  u8 *base=(u8*)s;u32 count=W(s,0x238);if(count>32)return;int found=-1;
  for(u32 i=0;i<count;i++){u8 *e=base+i*16;if(e[0x38]&&W(e,0x3c)==pitch&&H(e,0x3a)==0){found=(int)i;break;}}
  if(found>=0)FN(0x0805fe00,void(*)(void*,u32,u32,u32,void*))(s,pitch,frame,0,router);
  FN(0x0805f8e0,void(*)(void*,u32,u32,u32,u32,void*))(s,pitch,vel,frame,0,router);
  i64 now=0;FN(0x080a21c0,void(*)(void*,void*,int))(&now,clock,(int)frame);
- i64 end=now+(i64)(((u64)period*(u64)(len_ticks?len_ticks:960u))/960u);
+ i64 end=now+(i64)(((u64)period*(u64)(len_ticks?len_ticks:unit))/unit);
  if(found<0){if(count>=32)return;found=(int)count;W(s,0x238)=count+1;}
  u8 *e=base+(u32)found*16;W(e,0x3c)=pitch;H(e,0x3a)=0;e[0x38]=1;*(i64*)(e+0x40)=end;
 }
@@ -71,11 +72,24 @@ extern "C" __attribute__((used,retain)) void live_render(void *s,void *clock,u32
  EuBank *b=bank();if(!b)return;EuRuntime *r=runtime(b,s,0);if(r)r->ready=0;
  if(!B(s,0x20)||!clock||!router||frames>1024||offset>1024||offset+frames>1024){phase(r,0,0);return;}
  int row=rowof(s);if(row<0){phase(r,0,0);return;}EuPad pads[16];u32 mel=0;u8 pitch[16];if(!snapshot(b,s,(u32)row,pads,&mel,pitch))return;
+ if(mel&1u){phase(r,0,0);if(r)r->ready=0;return;} /* P19: melodic rows are native clip notes, played by the native sequencer */
  int any=0;for(u32 i=0;i<16;i++)if(eu_enabled(pads[i]))any=1;if(!any){phase(r,0,0);return;}
  if(!r)r=runtime(b,s,1);if(!r)return;
- void *clip=(void*)W(s,0x86c0);u32 grid=W(clip,0);if(grid>=15)return;
- float scale=((const float*)0x080bdbecu)[grid];u32 period=(u32)(scale*960.0f+0.5f);if(!period||period>30720)return;
- if(r->epoch!=b->epoch||r->owner!=W(s,12)||r->row!=(u32)row||r->reserved[0]!=period){
+ void *clip=(void*)W(s,0x86c0);u32 grid=W(clip,0);if(grid>=15&&B(clip,0x38))return;
+ /* P17: melodic rows also step on absolute-tick clips (flag +38 clear: notes at
+    960 per quarter, native period 0). Their step is the Step Len, and a note's
+    step index is tick / step ticks. Drum rows keep the P13 rule. */
+ /* P18: absolute-tick clips do not keep the grid in clip +0 (the native renderer
+    reads it only with +38 set; P17 on hardware: nothing played). The UI publishes
+    the Step Len with the melodic record (reserved[0] bits 8..11 = index + 1). */
+ int step_mode=B(clip,0x38)!=0;u32 ugrid=(mel>>8)&15u;mel&=1u;
+ float scale=step_mode?((const float*)0x080bdbecu)[grid]:mel&&ugrid?((const float*)0x080bdbecu)[ugrid-1]:1.0f;u32 period=(u32)(scale*960.0f+0.5f);if(!period||period>30720)return;
+ u32 unit=step_mode||!mel?960u:period;
+ i64 block_start=0;FN(0x080a21c0,void(*)(void*,void*,int))(&block_start,clock,(int)offset);
+ i64 previous=(i64)((u64)r->spare[0]|((u64)r->spare[1]<<32));
+ int rewind=r->spare[2]&&block_start<previous;
+ r->spare[0]=(u32)block_start;r->spare[1]=(u32)((u64)block_start>>32);r->spare[2]=1;
+ if(rewind||r->epoch!=b->epoch||r->owner!=W(s,12)||r->row!=(u32)row||r->reserved[0]!=period){
   r->origin=*(i64*)((u8*)clip+0x20);r->next=r->origin;r->step=0;
   i64 start=0;FN(0x080a21c0,void(*)(void*,void*,int))(&start,clock,(int)offset);
   if(start>r->origin){i64 steps=FN(0x080a34f4,i64(*)(i64,i64))(start-r->origin,(i64)period);r->step=(u32)steps;r->next=r->origin+steps*period;}
@@ -89,7 +103,7 @@ extern "C" __attribute__((used,retain)) void live_render(void *s,void *clock,u32
    u32 mask=0,native=0,locks[16]={0},vel[16]={0},cond[16]={0},ranks[16]={0},totals[16]={0},bits[16][8]={0},glen[16]={0};
    for(u32 pad=0;pad<16;pad++){
     EuPad p=pads[pad];if(!eu_pad_valid(p)||!eu_enabled(p))continue;vel[pad]=eu_base(p);
-    if(eu_native(p)&&!mel){native|=1u<<pad;continue;}
+    if(eu_native(p)){native|=1u<<pad;continue;}
     u32 n=eu_length(p),k=eu_pulses(p),rot=eu_rotation(p);if((((r->step%n+n-rot)%n)*k)%n<k)mask|=1u<<pad;
    }
    if(mask||native){
@@ -97,12 +111,12 @@ extern "C" __attribute__((used,retain)) void live_render(void *s,void *clock,u32
     /* Native notes are authoritative for editable pads, including empty steps.
        Read once for all pads; never change the native scheduling cursor. */
     u32 seen=0;
-    if(!mel&&cursor[1]<=511)for(u32 j=0;j<cursor[1];j++){
+    if(cursor[1]<=511)for(u32 j=0;j<cursor[1];j++){
      cursor[2]=j;if(!FN(0x08095da0,int(*)(void*,void*))(cursor,event))break;u32 pad=H(event,2);
      if(mel){pad=16;for(u32 q=0;q<16;q++)if(((mask|native)&(1u<<q))&&pitch[q]==H(event,16)){pad=q;break;}}
      if(B(event,0)!=1||pad>=16||!((mask|native)&(1u<<pad)))continue;
-     int tick=(int)event[1],q=tick%960;if(q>480)q-=960;
-     int at=(tick-q)/960;u32 n=eu_length(pads[pad]);
+     int tick=(int)event[1],U=(int)unit,q=tick%U;if(q>U/2)q-=U;
+     int at=(tick-q)/U;u32 n=eu_length(pads[pad]);
      if(eu_mode(pads[pad])&&eu_depth(pads[pad])&&(native&(1u<<pad)) && at>=0 && (u32)at<n){u32 bit=1u<<((u32)at%32);if(!(bits[pad][(u32)at/32]&bit)){bits[pad][(u32)at/32]|=bit;totals[pad]++;if((u32)at<r->step%n)ranks[pad]++;}}
      if(at!=(int)(r->step%n))continue;
      if(native&(1u<<pad)){
@@ -121,7 +135,7 @@ extern "C" __attribute__((used,retain)) void live_render(void *s,void *clock,u32
      }
      locks[pad]=locks_filter(s,locks[pad],r->step/eu_length(pads[pad]));
      if(mel){FN(LIVE_LOCK_PENDING,void(*)(u32))(locks[pad]);if(locks[pad])FN(LIVE_LOCK_ROUTE,void(*)(void*,void*,u32))(s,router,0);
-      mel_play(s,pitch[pad],vel[pad],(u32)frame,clock,router,glen[pad]?glen[pad]:(eu_gate(pads[pad])?eu_gate(pads[pad]):4u)*240u,period);}
+      FN(MEL_PENDING,void(*)(void*,void*,u32,u32))(s,router,0,locks[pad]);mel_play(s,pitch[pad],vel[pad],(u32)frame,clock,router,glen[pad]?glen[pad]:(eu_gate(pads[pad])?eu_gate(pads[pad]):4u)*unit/4u,period,unit);FN(MEL_PENDING_CLEAR,void(*)())();}
      else{FN(LIVE_LOCK_PENDING,void(*)(u32))(locks[pad]);if(locks[pad])FN(LIVE_LOCK_ROUTE,void(*)(void*,void*,u32))(s,router,pad);
      FN(0x0805f8e0,void(*)(void*,u32,u32,u32,u32,void*))(s,0,vel[pad],(u32)frame,pad,router);}
      FN(LIVE_LOCK_PENDING,void(*)(u32))(0);
@@ -152,6 +166,8 @@ static void chord_send(void *router,const u32 *rec,u32 pitch,u32 vel=0){u32 r[6]
 extern "C" __attribute__((used,retain)) void chord_press(void *router,u32 *rec,u32 pad,u32 slot){
  EuBank *b=bank();u32 root=rec[3];if(!b||root>127||slot>1){CHORD_POST(router,rec);return;}
  ChordOwn *o=&b->chord_own;u32 bit=1u<<(root&31),*held=&o->held[slot][root>>5];
+ /* P21: every keyboard pad press publishes its pitch (Euclid row Note from a pad, owner). */
+ if(!slot&&pad<16){ChordPub *pp=&b->chord_pub;pp->pitch[pad]=(u8)(0x80|root);pp->serial+=2;__asm__ volatile("dsb" ::: "memory");W((void*)0xe000ef68u,0)=(u32)pp;__asm__ volatile("dsb" ::: "memory");}
  if(!(*held&bit)){
   if(!slot){
    u8 n;signed char off[CA_VOICES];u32 vel=0;if(!chord_mail(b,root%12,&n,off,&vel)){CHORD_POST(router,rec);return;}o->vel[root]=(u8)vel;
@@ -170,4 +186,13 @@ extern "C" __attribute__((used,retain)) void chord_release(void *router,u32 *rec
  if(!(*held&bit)){CHORD_POST(router,rec);return;}
  *held&=~bit;if(!slot){ChordPub *pub=&b->chord_pub;if(pub->held)pub->held--;pub->serial+=2;__asm__ volatile("dsb" ::: "memory");W((void*)0xe000ef68u,0)=(u32)pub;__asm__ volatile("dsb" ::: "memory");}
  for(u32 i=0;i<o->count[root];i++){u32 p=o->notes[root][i];if(o->refs[slot][p]&&!--o->refs[slot][p])chord_send(router,rec,p);}
+}
+/* P1 fixed velocity. The native pad press 08084760 maps the record's pressure
+   p (+0x10) to velocity min(p,0xD000)*127/0xD000. While the selected track's
+   fixed velocity is on, the press uses the smallest pressure giving exactly
+   that velocity; everything after (chords, notes, recording) stays native. */
+extern "C" __attribute__((used,retain)) void perf_press(u32 *rec){
+ invalidate(EU_CONTROL_ADDR,32);u32 v=EC->reserved[1];
+ if(!rec||(v&0xffffff00u)!=PERF_FIXED_TAG||!rec[4])return;
+ u32 vel=v&255u;if(vel<1||vel>127)return;rec[4]=(vel*0xd000u+126u)/127u;
 }

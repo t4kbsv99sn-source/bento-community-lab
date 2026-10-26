@@ -4,6 +4,8 @@ typedef unsigned long long u64;typedef long long i64;
 #define EU_CONTROL_ADDR 0x24041fc0u
 #define EU_MAGIC 0x324c5545u
 #define EU_RECORDS 128u
+/* P1 fixed velocity: EuControl.reserved[1] = PERF_FIXED_TAG|velocity (1..127), 0 = off. */
+#define PERF_FIXED_TAG 0x56454c00u
 /* M4 publishes config; M7 exclusively owns Runtime. Boundaries cache aligned. */
 typedef struct {u32 pattern,velocity;} EuPad;
 /* CH3 melodic rows: reserved[0] bit0 marks a pitched-track record; reserved[1..4]

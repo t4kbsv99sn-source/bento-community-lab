@@ -1,0 +1,5 @@
+# Current label audit
+Source: development source feature/performance, commit371ff09204d0dfdd41bcda02d62953ecc7bdf791, P27. main is older.
+Confirmed: melodic tabs Chord/Euclid/Step/Seq/Select/Clear; drum Euclidean/Step/Sequence/Select/Clear; chord bank1 Chord type/Voicing/Inversion/Rhythm/Position/Length/Velocity/Bars; melodic Euclid Row/Note/Length/Hits/Rotate/Gate/Vel Mode/Vel Depth; drum Euclid Pad/Length/Hits/Rotate/Vel Mode/Vel Depth; Track FX names from fx_ui.c. Macros use0–127, not0–100.
+P27 implements a swiped macro strip; the full macro editor remains a proposed design. Performance encoders remain unchanged. Motion editor slots3–6 are Length/Rec Length/Write/Bars; slots1/2/7/8 are native. The existing motion mockup has not yet been fully reconciled to those native labels. Other inherited native Step/Sequence/WAV fields still need a full runtime label audit. These exceptions must not be treated as confirmed parity.
+Preview hardware controls are shortcuts. Actual hold/swipe behavior and audio are not emulated.

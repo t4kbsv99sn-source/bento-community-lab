@@ -78,21 +78,43 @@ class Tests(unittest.TestCase):
   self.assertEqual(bytes(p.u.mem_read(0x24041a00,0x600)),b'\xa5'*0x600)
  def test_new_ui_code_contains_no_floating_point_instructions(self):
   # Limit disassembly to executable ELF symbol sizes (exclude string literals).
-  from build_fx import elf,R
-  _,symbols=elf(R/'ui.elf');c=Cs(CS_ARCH_ARM,CS_MODE_THUMB)
-  starts=sorted(set(symbols.values()))
-  for start in starts:
+  # P1: only FUNC symbols are code (data such as label tables can decode as
+  # anything); the next symbol of any kind still bounds each function.
+  from build_fx import R
+  b=(R/'ui.elf').read_bytes();off=struct.unpack_from('<I',b,32)[0];step,n=struct.unpack_from('<HH',b,46)
+  ss=[struct.unpack_from('<10I',b,off+i*step) for i in range(n)];funcs=set();starts=set()
+  for sh in ss:
+   if sh[1]!=2:continue
+   for i in range(0,sh[5],sh[9]):
+    _,value,size,info,_,_=struct.unpack_from('<IIIBBH',b,sh[4]+i)
+    if info&15==2:funcs.add(value&~1);starts.add(value&~1)
+    elif info&15==1:starts.add(value)
+  starts=sorted(starts);c=Cs(CS_ARCH_ARM,CS_MODE_THUMB);self.assertGreater(len(funcs),100)
+  for start in sorted(funcs):
    end=next((a for a in starts if a>start),start+20)
    for i in c.disasm(IMAGE[start-BASE:end-BASE],start):self.assertFalse(i.mnemonic.startswith('v'),str(i))
  def test_native_millisecond_counter_used_by_gesture(self):
   p=Machine(4);p.u.mem_write(0x3001fe2c,struct.pack('<I',0xfffffff0));p.call(0x081152c0)
   self.assertEqual(p.u.reg_read(UC_ARM_REG_R0),0xfffffff0)
  def test_patch_reversal_alignment_vectors_recovery_and_heap_guards(self):
-  restored=bytearray(IMAGE)
+  pre=IMAGE
+  if (OUT/'MOTION_MANIFEST.json').exists():
+   # P22: the motion layer is applied to the complete Playground image (fx/).
+   pre=(OUT/'fx/bento1.bin').read_bytes();layer=bytearray(IMAGE)
+   for w in reversed(json.loads((OUT/'MOTION_MANIFEST.json').read_text())['writes']):
+    a=w['address']-BASE;self.assertEqual(IMAGE[a:a+w['size']].hex(),w['replacement_hex'])
+    layer[a:a+w['size']]=bytes.fromhex(w['original_hex'])
+   self.assertEqual(bytes(layer[:len(pre)]),pre);self.assertFalse(any(layer[len(pre):]))
+  restored=bytearray(pre)
   for w in reversed(MAN['writes']):
-   a=w['address']-BASE;self.assertEqual(IMAGE[a:a+w['size']].hex(),w['replacement_hex'])
+   a=w['address']-BASE;self.assertEqual(pre[a:a+w['size']].hex(),w['replacement_hex'])
    restored[a:a+w['size']]=bytes.fromhex(w['original_hex'])
   self.assertEqual(bytes(restored[:len(BASELINE)]),BASELINE);self.assertEqual(len(IMAGE)%4,0)
+  motion_manifest=OUT/'MOTION_MANIFEST.json'
+  if motion_manifest.exists():
+   motion=json.loads(motion_manifest.read_text())
+   for w in motion['writes']:
+    self.assertFalse(0x080e0000<=w['address']<0x08100000) # P22b: never the 080E0000 program sector
   for a,n in [(BASE,0x400),(0x080e0000,0x20000),(0x08100000,0x400),(0x08114d74,0x180),(0x0804fa00,0x200)]:
    self.assertEqual(IMAGE[a-BASE:a-BASE+n],BASELINE[a-BASE:a-BASE+n])
   for a in [0x08040588,0x080a3bdc,0x080a3e94]:self.assertEqual(struct.unpack_from('<I',IMAGE,a-BASE)[0],0x24040000)

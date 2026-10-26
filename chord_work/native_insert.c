@@ -34,7 +34,7 @@ int chord_native_insert(ChordNative *s,void *m,const Progression *p){
  void *temp=(void*)s->scratch;FN(0x0810d16c,void(*)(void*))(temp);
  /* Musical bounds, native capacity, ID headroom and allocation have all
      passed before the single snapshot/mutation boundary. */
- FN(0x081338dc,void(*)(void*,void*))(m,&s->seq);
+ if(!s->no_snapshot)FN(0x081338dc,void(*)(void*,void*))(m,&s->seq);
  s->note_count=(unsigned)n;
  /* The ID allocator inserts into the model. Bulk publish sends those same
      IDs to the audio queue and must not allocate them a second time. */
@@ -147,4 +147,30 @@ int chord_native_rhythmize(ChordNative *s,void *m,uint32_t min_id,unsigned rhyth
  FN(0x08136544,void(*)(void*,void*,void*))(m,&seq,temp);
  W(m,0x36c4)=1;uint32_t ev[5]={0xc7,seq,0,0,0};FN(0x08173272,void(*)(void*,void*))((uint8_t*)m+0x160,ev);
  return (int)chords;
+}
+
+static int scratch_of(ChordNative *s){
+ if(!s->scratch){uint32_t cursor=W((void*)0x3000004cu,0),end=W((void*)0x30000048u,0);
+  if(cursor<0xc0000000u||end>0xc8000000u||cursor>end||end-cursor<SCRATCH+32)return 0;
+  uint32_t allocated=FN(0x08104c08,uint32_t(*)(unsigned))(SCRATCH);if(allocated!=cursor)return 0;s->scratch=allocated;}
+ return s->scratch>=0xc0000000u&&s->scratch<=0xc8000000u-SCRATCH&&!(s->scratch&3);
+}
+static int own(ChordNative *s,uint32_t id){for(unsigned j=0;j<s->note_count&&j<CH_MAX_NOTES;j++)if(s->note_ids[j]==id)return 1;return 0;}
+static void changed(ChordNative *s,void *m){W(m,0x36c4)=1;uint32_t event[5]={0xc7,s->seq,0,0,0};FN(0x08173272,void(*)(void*,void*))((uint8_t*)m+0x160,event);}
+int chord_native_shift(ChordNative *s,void *m,uint32_t from,int32_t delta){
+ if(!delta)return CH_OK;void *c=container_of(s,m);if(!c)return CH_STALE;if(!scratch_of(s))return CH_MEMORY;
+ void *temp=(void*)s->scratch;unsigned count=W(c,0x3000),moved=0;uint32_t raw[6];FN(0x0810d16c,void(*)(void*))(temp);
+ for(unsigned i=0;i<count;i++){if(!read_note(c,i,raw))return CH_INVALID;if(B(raw,0)!=1||H(raw,2)!=0||raw[1]<from||own(s,raw[3]))continue;
+  int64_t at=(int64_t)raw[1]+delta;if(at<0||at+raw[2]>s->clip_end)return CH_RANGE; /* refuse rather than lose notes past the clip end */
+  raw[1]=(uint32_t)at;FN(0x0810d176,void(*)(void*,void*))(temp,raw);moved++;}
+ if(!moved)return CH_OK;
+ if(!s->no_snapshot)FN(0x081338dc,void(*)(void*,void*))(m,&s->seq);
+ FN(0x08136544,void(*)(void*,void*,void*))(m,&s->seq,temp);changed(s,m);return CH_OK;
+}
+int chord_native_delete(ChordNative *s,void *m){
+ if(!s->note_count)return CH_OK;void *c=container_of(s,m);if(!c)return CH_STALE;if(!scratch_of(s))return CH_MEMORY;
+ void *temp=(void*)s->scratch;unsigned count=W(c,0x3000),found=0;uint32_t raw[6];FN(0x0810d16c,void(*)(void*))(temp);
+ for(unsigned i=0;i<count;i++){if(!read_note(c,i,raw))return CH_INVALID;if(own(s,raw[3])){FN(0x0810d176,void(*)(void*,void*))(temp,raw);found++;}}
+ if(found){if(!s->no_snapshot)FN(0x081338dc,void(*)(void*,void*))(m,&s->seq);FN(0x08136fb4,void(*)(void*,void*,void*))(m,&s->seq,temp);changed(s,m);}
+ s->note_count=0;return CH_OK;
 }

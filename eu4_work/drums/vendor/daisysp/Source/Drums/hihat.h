@@ -39,6 +39,31 @@ class SquareNoise
 
     float Process(float f0);
 
+    /* Bento port (CH12): the six increments depend only on f0, which is
+       constant for a block. Increments() + ProcessIncrements() are
+       bit-identical to Process(f0). */
+    static void Increments(float f0, uint32_t *increment)
+    {
+        const float ratios[6] = {1.0f, 1.304f, 1.466f, 1.787f, 1.932f, 2.536f};
+        for(int i = 0; i < 6; ++i)
+        {
+            float f = f0 * ratios[i];
+            if(f >= 0.499f)
+                f = 0.499f;
+            increment[i] = static_cast<uint32_t>(f * 4294967296.0f);
+        }
+    }
+    inline float ProcessIncrements(const uint32_t *increment)
+    {
+        uint32_t noise = 0;
+        for(int i = 0; i < 6; ++i)
+        {
+            phase_[i] += increment[i];
+            noise += phase_[i] >> 31;
+        }
+        return 0.33f * static_cast<float>(noise) - 1.0f;
+    }
+
   private:
     uint32_t phase_[6];
 };
@@ -156,7 +181,7 @@ class HiHat
         BlockCoefficients c=PrepareBlock();
         return ProcessPrepared(c, trigger);
     }
-    struct BlockCoefficients {float envelope_decay,cut_decay;};
+    struct BlockCoefficients {float envelope_decay,cut_decay,noise_f,sustain_gain;uint32_t increment[6];};
     BlockCoefficients PrepareBlock()
     {
         const float envelope_decay
@@ -177,7 +202,15 @@ class HiHat
 
         hpf_.SetFreq(cutoff * sample_rate_);
         hpf_.SetRes(0.f);
-        return {envelope_decay,cut_decay};
+        BlockCoefficients c;
+        c.envelope_decay = envelope_decay;
+        c.cut_decay      = cut_decay;
+        /* Bento CH12: per-sample constants, same expressions as before. */
+        float noise_f = f0_ * (16.0f + 16.0f * (1.0f - noisiness_));
+        c.noise_f     = fclamp(noise_f, 0.0f, 0.5f);
+        c.sustain_gain = accent_ * decay_;
+        MetallicNoiseSource::Increments(2.0f * f0_, c.increment);
+        return c;
     }
     float ProcessPrepared(const BlockCoefficients &c, bool trigger=false)
     {
@@ -191,19 +224,15 @@ class HiHat
         }
 
         // Process the metallic noise.
-        float out = metallic_noise_.Process(2.0f * f0_);
+        float out = metallic_noise_.ProcessIncrements(c.increment);
 
         // Apply BPF on the metallic noise.
-        noise_coloration_svf_.Process(out);
-        out = noise_coloration_svf_.Band();
+        out = noise_coloration_svf_.ProcessBand(out); /* Bento CH12: lean, identical */
 
         // This is not at all part of the 808 circuit! But to add more variety, we
         // add a variable amount of clocked noise to the output of the 6 schmitt
         // trigger oscillators.
-        float noise_f = f0_ * (16.0f + 16.0f * (1.0f - noisiness_));
-        noise_f       = fclamp(noise_f, 0.0f, 0.5f);
-
-        noise_clock_ += noise_f;
+        noise_clock_ += c.noise_f;
         if(noise_clock_ >= 1.0f)
         {
             noise_clock_ -= 1.0f;
@@ -212,13 +241,12 @@ class HiHat
         out += noisiness_ * (noise_sample_ - out);
 
         // Apply VCA.
-        sustain_gain_ = accent_ * decay_;
+        sustain_gain_ = c.sustain_gain;
         VCA vca;
         envelope_ *= envelope_ > 0.5f ? envelope_decay : cut_decay;
         out = vca(out, sustain_ ? sustain_gain_ : envelope_);
 
-        hpf_.Process(out);
-        out = hpf_.High();
+        out = hpf_.ProcessHigh(out);
 
         return out;
     }

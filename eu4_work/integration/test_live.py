@@ -9,7 +9,7 @@ class Live(Probe):
  def __init__(self,notes=None):
   super().__init__(notes=notes);self.clock=0x20028000;self.audioseq=0xc0080000;self.router=0xc0090000;self.clip=self.audioseq+0x240;self.emitted=[];self.locktrace=[];self.absolute=[];self.block=0;self.currentrow=0
   self.w(self.audioseq+12,self.owner);self.u.mem_write(self.audioseq+0x20,b'\x01');self.w(self.audioseq+0x14,0)
-  self.w(self.audioseq+0x86c0,self.clip);self.w(self.clip+0x20,0);self.w(self.clip,10);self.u.mem_write(self.audioseq+0x86d2,b'\x01')
+  self.w(self.audioseq+0x86c0,self.clip);self.w(self.clip+0x20,0);self.w(self.clip,10);self.u.mem_write(self.clip+0x38,b'\x01');self.u.mem_write(self.audioseq+0x86d2,b'\x01')
   self.f(self.clock+0x18,120);self.f(self.clock+0x14c,.5)
   for i in range(16):self.w(self.audioseq+0x86dc+i*4,1000+i)
   self.u.hook_add(UC_HOOK_CODE,self.route,begin=0x0809f040,end=0x0809f040)

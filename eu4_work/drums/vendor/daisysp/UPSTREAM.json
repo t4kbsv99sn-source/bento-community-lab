@@ -10,7 +10,8 @@
   },
   "changes": [
     "Freestanding dsp.h subset and math shims",
-    "Cache pitch/decay/tone coefficients once per render configuration instead of recomputing powf each sample"
+    "Cache pitch/decay/tone coefficients once per render configuration instead of recomputing powf each sample",
+    "S1 adds SetFreqPrepared to Svf: same coefficient math with a block-prepared resonance damping term; existing drum methods unchanged."
   ],
   "licence": "MIT"
 }

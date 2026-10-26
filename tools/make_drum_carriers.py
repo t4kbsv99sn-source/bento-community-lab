@@ -1,7 +1,7 @@
 """Exact K15 browser carriers. These identify live synths; they are not samples."""
 from pathlib import Path
 import argparse,wave,struct
-FRAMES={'BENTO_Kick_K2.wav':144019,'BENTO_Synth_Snare.wav':144021,'BENTO_Synth_HiHat.wav':144023}
+FRAMES={'BENTO_Kick_K2.wav':144019,'BENTO_Synth_Snare.wav':144021,'BENTO_Synth_HiHat.wav':144023,'BENTO_Synth_Clap.wav':144025,'BENTO_Synth_Tom.wav':144027,'BENTO_Synth_Subtractive.wav':144029}
 SIGNATURE=0xb1e70a5c
 
 def make(directory):

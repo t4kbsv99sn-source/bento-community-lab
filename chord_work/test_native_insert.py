@@ -13,7 +13,7 @@ OUT=Path(os.environ['BENTO_CHORD_BUILD']);SYMS=json.loads((OUT/'symbols.json').r
 class Native(Probe):
  def __init__(self,steps=16,notes=None):
   super().__init__(steps=steps,notes=notes or []);KEEP.append(self);self.type=18
-  self.u.mem_write(0x081e0000,(OUT/'chords.bin').read_bytes());self.state=0x20026000;self.phrase=0x20027000
+  self.u.mem_write(int(os.environ.get('BENTO_CHORD_TEST_ORIGIN','0x081e0000'),0),(OUT/'chords.bin').read_bytes());self.state=0x20026000;self.phrase=0x20027000
   self.u.mem_write(self.state,struct.pack('<4I',self.seq,self.owner,self.steps*960,0)+bytes(388));self.u.mem_write(self.phrase,bytes(generate()))
  def native(self,u,a,n,d):
   if a==0x08133f7c:

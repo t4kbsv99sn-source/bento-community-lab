@@ -9,6 +9,7 @@ https://opensource.org/licenses/MIT.
 #pragma once
 #ifndef DSY_SVF_H
 #define DSY_SVF_H
+#include <math.h>
 
 namespace daisysp
 {
@@ -45,6 +46,18 @@ class Svf
     */
     void SetFreq(float f);
 
+    /* Bento S1: identical SetFreq math, with the resonance-dependent term
+       prepared once per block. Does not change the existing drum API. */
+    inline void SetFreqPrepared(float f, float resonance_damping)
+    {
+        fc_ = f < 1.0e-6f ? 1.0e-6f : f > fc_max_ ? fc_max_ : f;
+        float norm = fc_ / (sr_ * 2.0f);
+        freq_ = 2.0f * sinf(3.14159265358979323846f * (norm < .25f ? norm : .25f));
+        float limit = 2.0f / freq_ - freq_ * .5f;
+        if(limit > 2.0f)limit = 2.0f;
+        damp_ = resonance_damping < limit ? resonance_damping : limit;
+    }
+
     /** sets the resonance of the filter.
         Must be between 0.0 and 1.0 to ensure stability.
     */
@@ -57,6 +70,62 @@ class Svf
     /** lowpass output
         \return low pass output of the filter
     */
+    /* Bento port (CH12): Process() returning one output. Same two passes and
+       the same statements, so the returned value and the state that carries
+       over (low_, band_) are bit-identical to Process() and then Low(),
+       High() or Band(). The other outputs are not updated. */
+    inline float ProcessLow(float in)
+    {
+        float band = band_, low = low_;
+        float notch = in - damp_ * band;
+        low         = low + freq_ * band;
+        float high  = notch - low;
+        band        = freq_ * high + band - drive_ * band * band * band;
+        float out   = 0.5f * low;
+        notch       = in - damp_ * band;
+        low         = low + freq_ * band;
+        high        = notch - low;
+        band        = freq_ * high + band - drive_ * band * band * band;
+        out += 0.5f * low;
+        band_ = band;
+        low_  = low;
+        return out;
+    }
+    inline float ProcessHigh(float in)
+    {
+        float band = band_, low = low_;
+        float notch = in - damp_ * band;
+        low         = low + freq_ * band;
+        float high  = notch - low;
+        band        = freq_ * high + band - drive_ * band * band * band;
+        float out   = 0.5f * high;
+        notch       = in - damp_ * band;
+        low         = low + freq_ * band;
+        high        = notch - low;
+        band        = freq_ * high + band - drive_ * band * band * band;
+        out += 0.5f * high;
+        band_ = band;
+        low_  = low;
+        return out;
+    }
+    inline float ProcessBand(float in)
+    {
+        float band = band_, low = low_;
+        float notch = in - damp_ * band;
+        low         = low + freq_ * band;
+        float high  = notch - low;
+        band        = freq_ * high + band - drive_ * band * band * band;
+        float out   = 0.5f * band;
+        notch       = in - damp_ * band;
+        low         = low + freq_ * band;
+        high        = notch - low;
+        band        = freq_ * high + band - drive_ * band * band * band;
+        out += 0.5f * band;
+        band_ = band;
+        low_  = low;
+        return out;
+    }
+
     inline float Low() { return out_low_; }
     /** highpass output
         \return high pass output of the filter

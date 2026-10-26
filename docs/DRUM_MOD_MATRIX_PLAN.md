@@ -1,6 +1,8 @@
 # Drum synth modulation matrix — integration plan and evidence
 
-Status: NOT implemented in EU10. The EU10 image changes the p-lock target list only. Do not claim that selecting synth controls in the instrument editor or p-lock picker makes them native modulation destinations. No nonfunctional modulation rows have been added.
+Status (CH11 / 1.6HB): implemented in software; hardware test pending. See docs/releases/ch11/DESIGN.md for what was built and how it differs from this plan (destinations reuse the synth knob keys; the engine is tagged per pad). The rest of this file is the original EU10-era plan.
+
+Original status: NOT implemented in EU10. The EU10 image changes the p-lock target list only. Do not claim that selecting synth controls in the instrument editor or p-lock picker makes them native modulation destinations. No nonfunctional modulation rows have been added.
 
 ## Desired behavior
 

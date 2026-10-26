@@ -27,8 +27,12 @@ original_test=ROOT/'k16_work/bento_controls/test_k16.py'
 module=types.ModuleType('test_k16');module.__file__=str(original_test)
 source=original_test.read_text().replace("struct.unpack('<2H',p.u.mem_read(0x300000bc+8,4))","struct.unpack('<2H',p.u.mem_read(0x300000bc+12,4))")
 source=source.replace('(1,12,20),(3,20,17),(5,25,17)','(1,12,16),(3,20,13),(5,25,13)').replace('p.encoder(0x1da,12)','p.encoder(0x1da,8)').replace('p.encoder(0x1e4,13)','p.encoder(0x1e4,9)')
+# P10: the 909 Snare's Tune readout is 140 Hz x 2^(v/50): the default 10 shows 160 Hz (was 80+12v = 200 Hz).
+source=source.replace("self.assertEqual(p.text(slot+0x2c8),'200 Hz')","self.assertEqual(p.text(slot+0x2c8),'160 Hz')")
 exec(compile(source,str(original_test),'exec'),module.__dict__);sys.modules['test_k16']=module
-modules=['test_k16','test_l8','test_holdstep','test_conditions','test_inst_lights','test_mixer_lights','test_drum_mute']
+# P17 (owner plan): hold-INST on SEQ is removed, so its light-restoring return
+# (test_inst_lights) no longer applies; stock INST is checked in test_previous_controls.
+modules=['test_k16','test_l8','test_holdstep','test_conditions','test_mixer_lights','test_drum_mute']
 modules=[m for m in modules if (ROOT/'k16_work/bento_controls'/(m+'.py')).exists()]
 suite=unittest.defaultTestLoader.loadTestsFromNames(modules)
 result=unittest.TextTestRunner(verbosity=2).run(suite);sys.exit(not result.wasSuccessful())

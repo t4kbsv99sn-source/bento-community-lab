@@ -14,7 +14,7 @@ lib.chord_preset_name.restype=C.c_char_p
 class Arm:
  def __init__(self):
   self.u=Uc(UC_ARCH_ARM,UC_MODE_THUMB);self.u.ctl_set_cpu_model(UC_CPU_ARM_CORTEX_M4)
-  self.u.mem_map(0x081e0000,0x20000);self.u.mem_write(0x081e0000,(OUT/'chords.bin').read_bytes());self.u.mem_map(0x20000000,0x40000);self.syms=json.loads((OUT/'symbols.json').read_text())
+  self.u.mem_map(int(os.environ.get('BENTO_CHORD_TEST_ORIGIN','0x081e0000'),0),0x20000);self.u.mem_write(int(os.environ.get('BENTO_CHORD_TEST_ORIGIN','0x081e0000'),0),(OUT/'chords.bin').read_bytes());self.u.mem_map(0x20000000,0x40000);self.syms=json.loads((OUT/'symbols.json').read_text())
  def call(self,name,*args):
   for r,v in zip([UC_ARM_REG_R0,UC_ARM_REG_R1,UC_ARM_REG_R2,UC_ARM_REG_R3],args):self.u.reg_write(r,v)
   for i,v in enumerate(args[4:]):self.u.mem_write(0x2003e000+i*4,struct.pack('<I',v))

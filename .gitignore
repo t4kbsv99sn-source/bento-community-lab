@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.bin
+*.elf
+*.o
+*.so
+*.bundle
+*.zip
+build/
+dist/

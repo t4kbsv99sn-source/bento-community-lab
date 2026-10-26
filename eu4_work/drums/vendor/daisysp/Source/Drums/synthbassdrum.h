@@ -138,6 +138,9 @@ class SyntheticBassDrum
     // BENTO_MOD K15: independent transient amount; negative default is legacy Tone.
     void SetClick(float click) { click_level_ = fclamp(click, 0.f, 1.f); }
 
+    // BENTO_MOD P10: unclamped sweep depth for the Kick's Punch pitch dive (no new state).
+    void SetFmEnvelopeAmountRaw(float amount) { fm_envelope_amount_ = amount; }
+
     /** Sets how long the drum's volume takes to decay.
         \param Works 0-1.
     */

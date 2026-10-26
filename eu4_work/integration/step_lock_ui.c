@@ -3,14 +3,16 @@
 #include "seq_bank.h"
 #include "../../chord_work/device.h"
 #include "header_actions.h"
-int piano_eu_toolbar(void*,void*);
+#include "kick_knobs.h"
+#include "drum_models.h"
+int piano_eu_toolbar(void*,void*);int mod_toolbar(void*,void*);
 #define MODEL ((void*)0x30024b00u)
 #define PICKER 0x1dau
 #define PICKER2 0x1e4u
 static u32 picker(u32 i){return i?PICKER2:PICKER;}
 #define MAGIC 0x47555042u
 typedef struct {u32 seq,drum,kind,kind2;} Target;
-typedef struct {u32 magic,view,seq,drum,kind,shift,pick,changed,error,next,selection,kind2,pick2,changed2;Target targets[64];u32 pool,pool_count,select_mode,selected[8],swallowed;void *chord_state,*melodic_state;u32 auto_eu;void *lane_state;} UI;
+typedef struct {u32 magic,view,seq,drum,kind,shift,pick,changed,error,next,selection,kind2,pick2,changed2;Target targets[64];u32 pool,pool_count,select_mode,selected[8],swallowed;void *chord_state,*melodic_state;u32 auto_eu;void *lane_state,*perf_state,*mod_state;} UI;
 #define U ((volatile UI*)0x24048000u)
 _Static_assert(sizeof(UI)<=0x480,"Lock UI overlaps choice table");
 #define LOCK_COND_KEY 0x198u
@@ -24,12 +26,17 @@ static const char *const native_choices[]={"Remove lock","Level","Pitch","Pan","
 static const char *const titles[]={"Lock target","Lock Level","Lock Pitch","Lock Pan","Lock Filter","Lock Resonance","Lock Attack","Lock Decay","Lock Sustain","Lock Release","Lock Delay Send","Lock Reverb Send"};
 static const char *const titles2[]={"Lock 2 target","Lock 2 Level","Lock 2 Pitch","Lock 2 Pan","Lock 2 Filter","Lock 2 Resonance","Lock 2 Attack","Lock 2 Decay","Lock 2 Sustain","Lock 2 Release","Lock 2 Delay Send","Lock 2 Reverb Send"};
 #define CHOICES ((const char**)0x24048480u)
-static const char *const synth_names[]={"Kick Tune","Kick Decay","Kick Tone","Kick Impact","Kick Sweep","Kick Sweep Dec","Kick Dirt","Kick Click","Snare Tune","Snare Decay","Snare FM","Snare Impact","Snare Snappy","HiHat Tune","HiHat Decay","HiHat Tone","HiHat Impact","HiHat Noise"};
-static u32 engine(void *v,u32 *values){return FN(0x081bb080,u32(*)(u32,u32,u32*))(W(v,0x113e8),W(v,0x11400),values);}
-static u32 first(u32 m){return m==1?12:m==3?20:m==5?25:0;}
-static u32 total(u32 m){return m==1?16:(m==3||m==5)?13:12;}
+/* CH12: Tom locks use the Kick kinds 12..18, Clap the Snare kinds 20..24. */
+static const char *const tom_names[]={"Tom Tune","Tom Decay","Tom Tone","Tom Impact","Tom Sweep","Tom Sweep Dec","Tom Dirt"};
+static const char *const clap_names[]={"Clap Tune","Clap Decay","Clap Tone","Clap Impact","Clap Spread"};
+static u32 family(u32 m){return m==9?1:m==7?3:m;}
+static const char *const synth_names[]={"Kick Tune","Kick Decay","Kick Tone","Kick Impact","Kick Sweep","Kick Sweep Dec","Kick Punch","Kick Click","Snare Tune","Snare Decay","Snare Tone","Snare Impact","Snare Snappy","HiHat Tune","HiHat Decay","HiHat Tone","HiHat Impact","HiHat Noise"};
+static u32 engine(void *v,u32 *values){u32 m=FN(0x081bb080,u32(*)(u32,u32,u32*))(W(v,0x113e8),W(v,0x11400),values);return m==11?0:m;}
+static u32 first(u32 m){m=family(m);return m==1?12:m==3?20:m==5?25:0;}
+static u32 total(u32 m){return m==1?16:m==9?15:(m==3||m==5||m==7)?13:12;}
 static u32 to_kind(u32 v,u32 m){if(!m)return v;return v<6?v:v<8?v+4:first(m)+v-8;}
-static u32 to_pick(u32 k,u32 m){if(!m)return k<12?k:0;return k<6?k:k==10||k==11?k-4:synth_model(k)==m?k-first(m)+8:0;}
+static int synth_ok(u32 k,u32 m){return m && synth_model(k)==family(m) && k-first(m)+8<total(m);}
+static u32 to_pick(u32 k,u32 m){if(!m)return k<12?k:0;return k<6?k:k==10||k==11?k-4:synth_ok(k,m)?k-first(m)+8:0;}
 static u32 kind(u32 i){return i?U->kind2:U->kind;}
 static void setkind(u32 i,u32 k){if(i)U->kind2=k;else U->kind=k;}
 static u32 pick(u32 i){return i?U->pick2:U->pick;}
@@ -38,6 +45,8 @@ static void init(void){if(U->magic!=MAGIC){for(u32 i=0;i<sizeof(UI)/4;i++)((vola
 void **chord_state_slot(void){init();return (void**)&U->chord_state;}
 void **piano_eu_slot(void){init();return (void**)&U->melodic_state;}
 void **lane_state_slot(void){init();return (void**)&U->lane_state;}
+void **perf_state_slot(void){init();return (void**)&U->perf_state;}
+void **mod_state_slot(void){init();return (void**)&U->mod_state;}
 /* CH5: arm the default Euclidean view on every navigation into page 27. */
 void seq_auto_arm(u32 page){init();U->auto_eu=page==0x27;}
 int seq_auto_take(void *v){init();if(!U->auto_eu||!v)return 0;U->auto_eu=0;return 1;}
@@ -52,7 +61,7 @@ static void remember(void){
 static void context(void *v){
  init();u32 seq=W(v,0x113e4),drum=W(v,0x11400);
  if(U->view==(u32)v && U->seq==seq && U->drum==drum)return;
- for(u32 i=0;i<2;i++)W((void*)(0x30030168u+(i?0xfc0u:0x8c0u)+4u+80u),4)=(u32)select_label;U->select_mode=U->swallowed=0;for(u32 i=0;i<8;i++)U->selected[i]=0;U->view=(u32)v;U->seq=seq;U->drum=drum;U->error=0;U->changed=0;U->changed2=0;U->selection=0;U->kind=1;U->kind2=4;
+ for(u32 m=0;m<20;m++){void *menu=(void*)(0x30030168u+m*0xe0);for(u32 i=0;i<B(menu,0xcc)&&i<9;i++){void *cell=(u8*)menu+4+i*20;if(W(cell,0)==0x1051)W(cell,4)=(u32)select_label;}}U->select_mode=U->swallowed=0;for(u32 i=0;i<8;i++)U->selected[i]=0;U->view=(u32)v;U->seq=seq;U->drum=drum;U->error=0;U->changed=0;U->changed2=0;U->selection=0;U->kind=1;U->kind2=4;
  for(u32 i=0;i<64;i++)if(U->targets[i].seq==seq && U->targets[i].drum==drum){U->kind=U->targets[i].kind;U->kind2=U->targets[i].kind2;break;}
  u32 e[6];for(u32 i=0;i<511;i++){
   if(!FN(0x0810d2c0,int(*)(void*,u32,void*))((void*)W(v,0x113dc),i,e))break;
@@ -70,7 +79,7 @@ static int registry(u32 m){
  H(cd,0)=LOCK_COND_KEY;B(cd,2)=7;W(cd,4)=(u32)cond_title;W(cd,8)=0x081b6000u;W(cd,12)=135;
  void *rd=(void*)(reg+LOCK_READ_KEY*32);if(H(rd,0) && W(rd,4)!=(u32)read_title)return 0;for(u32 i=0;i<8;i++)W(rd,i*4)=W(cd,i*4);H(rd,0)=LOCK_READ_KEY;W(rd,4)=(u32)read_title;
 
- for(u32 i=0;i<total(m);i++){u32 k=to_kind(i,m);CHOICES[i]=k<12?native_choices[k]:synth_names[k-12];}
+ for(u32 i=0;i<total(m);i++){u32 k=to_kind(i,m);CHOICES[i]=k<12?native_choices[k]:m==9?tom_names[k-12]:m==7?clap_names[k-20]:synth_names[k-12];}
  u32 r=*(volatile u32*)0x30031484u;if(!r)return 0;
  for(u32 j=0;j<2;j++){
   void *d=(void*)(r+picker(j)*32);const char *title=j?titles2[0]:titles[0];
@@ -80,7 +89,7 @@ static int registry(u32 m){
  }return 1;
 }
 static int background(void *v,u32 k){
- if(k>11){u32 values[8];u32 m=engine(v,values);return synth_model(k)==m?(int)values[synth_index(k)]:0;}
+ if(k>11){u32 values[8];u32 m=engine(v,values);return synth_ok(k,m)?(int)values[synth_index(k)]:0;}
  u32 parent=W(v,0x113e8),cell=0,idx=0,value=0;
  for(u32 i=0;i<128;i++){
   if(!FN(0x0813391a,int(*)(void*,void*,u32,void*))(MODEL,&parent,i,&cell))break;
@@ -97,7 +106,7 @@ __attribute__((used,retain)) void locks_header_before(void *v){
   }
  }
  u32 m=engine(v,0);
- for(u32 i=0;i<2;i++)if((kind(i)>11 && synth_model(kind(i))!=m) || (m && kind(i)>=6 && kind(i)<=9))setkind(i,i?4:1);
+ for(u32 i=0;i<2;i++)if((kind(i)>11 && !synth_ok(kind(i),m)) || (m && kind(i)>=6 && kind(i)<=9))setkind(i,i?4:1);
  if(U->kind==U->kind2)U->kind2=U->kind==4?1:4;
  if(!registry(m))return;
  if(U->shift)H((void*)0x300000bcu,4)=LOCK_COND_KEY;
@@ -144,15 +153,16 @@ __attribute__((used,retain)) void locks_header_after(void *v){
   FN(0x08170656,void(*)(void*,u32,const char*))(bar,5,label);
  }
 
+ u32 model=engine(v,0);
  for(u32 i=0;i<2;i++){
   void *slot=(u8*)bar+0x38+(6+i)*0x468;u32 k=kind(i),w=has?lock_slot(e[5],i):0;
   int value=U->shift?(int)to_pick(pick(i),engine(v,0)):lock_kind(w)==k?decode_value(w):background(v,k);
   H(v,0x113ac+(6+i)*2)=(unsigned short)(U->shift?picker(i):native_key(k));W(v,0x113bc+(6+i)*4)=(u32)value;
   B(slot,0x2c8)=0; /* Clear an old --/error override before native formatting. */
   FN(0x08171c1c,void(*)(void*,u32,int,u32))(slot,U->shift?picker(i):native_key(k),value,1);
-  FN(0x0817e85e,void(*)(void*,const char*))((u8*)slot+0x3c8,(!U->shift&&k>11)?synth_names[k-12]:i?titles2[U->shift?0:k]:titles[U->shift?0:k]);
+  FN(0x0817e85e,void(*)(void*,const char*))((u8*)slot+0x3c8,(!U->shift&&k>11)?(model==9?tom_names[k-12]:model==7?clap_names[k-20]:synth_names[k-12]):i?titles2[U->shift?0:k]:titles[U->shift?0:k]);
   if(U->error)FN(0x08170656,void(*)(void*,u32,const char*))(bar,6+i,U->error==2?"Lock memory full":"Target already used");
-  else if(!U->shift && k>11){char text[20];u32 n=k==20?80+(u32)value*12:k==25?100+(u32)value*107/10:(u32)value,at=0;if(n>=1000)text[at++]='0'+n/1000%10;if(n>=100)text[at++]='0'+n/100%10;if(n>=10)text[at++]='0'+n/10%10;text[at++]='0'+n%10;if(k==12||k==20||k==25){text[at++]=' ';text[at++]='H';text[at++]='z';}else text[at++]='%';text[at]=0;FN(0x08170656,void(*)(void*,u32,const char*))(bar,6+i,text);}
+  else if(!U->shift && k>11){char text[20];u32 n=k==12||k==20||k==25?drum_tune_hz(model,(u32)value):(u32)value,at=0;if(n>=1000)text[at++]='0'+n/1000%10;if(n>=100)text[at++]='0'+n/100%10;if(n>=10)text[at++]='0'+n/10%10;text[at++]='0'+n%10;if(k==12||k==20||k==25){text[at++]=' ';text[at++]='H';text[at++]='z';}else text[at++]='%';text[at]=0;FN(0x08170656,void(*)(void*,u32,const char*))(bar,6+i,text);}
   else if(!U->shift && lock_kind(w)!=k)FN(0x08170656,void(*)(void*,u32,const char*))(bar,6+i,"--");
  }
 }
@@ -210,6 +220,7 @@ __attribute__((used,retain)) int locks_encoder(void *v,u32 key,int value){
  return 0;
 }
 __attribute__((used,retain)) void locks_proj(void *model,u32 down){
+ extern void melodic_locks_proj(void*,u32);melodic_locks_proj(model,down);
  init();void *v=(void*)U->view;u32 was=U->shift;if(!down)U->shift=0;
  if(B(model,0x12c)!=0x27 || !supported(v))return;context(v);
  if(down){u32 e[6]={0};U->selection=snapshot(v,e)?e[3]:0;U->shift=1;U->pick=U->kind;U->pick2=U->kind2;U->changed=U->changed2=U->error=0;}
@@ -275,10 +286,15 @@ __attribute__((used,retain)) int seq_select_event(void *v,void *event){
  u32 code=H(event,0);
  if(code==0x1055)return seq_eu_tab(v);
  if(code==0x49||code==0x4a){seq_eu_leave(v);return 0;}
+ if(code==0x102c&&supported(v)){ /* P20: Clear with selected steps clears only those (owner plan) */
+  context(v);int any=0;for(u32 i=0;i<8;i++)if(U->selected[i])any=1;if(!any)return 0;
+  extern int eu_clear_steps(u32,u32,const u32*,void*);eu_clear_steps(U->seq,U->drum,U->selected,MODEL);
+  for(u32 i=0;i<8;i++)U->selected[i]=0;refresh(v);return 1;
+ }
  if(!supported(v)||code!=0x1051)return 0;context(v);U->select_mode^=1;
  if(U->select_mode){W((void*)0x24048d80u,20)=0;for(u32 i=0;i<32;i++)W(v,0x11420+i*4)=0;}
  /* FA native menu descriptor #1, beside Undo. Native renderer owns the hitbox. */
- for(u32 i=0;i<2;i++){void *d=(void*)(0x30030168u+(i?0xfc0u:0x8c0u)+4u+80u);W(d,4)=(u32)(U->select_mode?select_on:select_label);}
+ for(u32 m=0;m<20;m++){void *menu=(void*)(0x30030168u+m*0xe0);for(u32 i=0;i<B(menu,0xcc)&&i<9;i++){void *cell=(u8*)menu+4+i*20;if(W(cell,0)==0x1051)W(cell,4)=(u32)(U->select_mode?select_on:select_label);}}
  refresh(v);return 1;
 }
 static int select_step(void *v,u32 local){
@@ -302,13 +318,40 @@ __attribute__((used,retain)) void seq_selection_reset(void *v){if(!supported(v))
 /* EU9: persistent header actions are separate from the popup definitions.
  * CH2: Undo is the last native slot on SEQ page 27, so Select takes the
  * rightmost free normal slot; header_sync makes late insertions visible. */
+/* P17 (owner: the Euclidean tab overlaps the on-screen pad selector). Undo is
+ * gone, so the row moves right: slot 0 stays free for the pad selector;
+ * Euclidean, Step, Sequence as tabs in 1..3 and Select in slot 4, directly
+ * next to them and Clear in slot 5, lined up with the melodic row. The
+ * native tab records are found by group, also when this ran before. */
+static int drum_seq_layout(void *out){
+ u8 tabs[2][48];u32 n=0;
+ for(u32 i=0;i<6&&n<2;i++){u8 *r=(u8*)out+0x74+i*48;u32 id=r[44]|r[45]<<8;if(r[0x22]&&id&&!(id>=0x1051u&&id<=0x1064u)){for(u32 j=0;j<48;j++)tabs[n][j]=r[j];n++;}}
+ int eu=seq_eu_mode((void*)U->view),changed=0;
+ u8 before[6*48];for(u32 j=0;j<6*48;j++)before[j]=((u8*)out)[0x74+j];
+ for(u32 i=0;i<6;i++){u8 *r=(u8*)out+0x74+i*48;for(u32 j=0;j<48;j++)r[j]=0;r[0x20]=1;}
+ header_fixed_tab(out,1,0x1055,"Euclidean",eu);
+ for(u32 k=0;k<n;k++){u8 *r=(u8*)out+0x74+(2+k)*48;for(u32 j=0;j<48;j++)r[j]=tabs[k][j];r[0x20]=0;r[0x22]=1;if(eu)r[0x21]=0;}
+ header_fixed_action(out,4,0x1051,U->select_mode?select_on:select_label,U->select_mode!=0);
+ header_fixed_action(out,5,0x102c,"Clear",0); /* owner: Clear next to Select, as in the melodic row (native Clear Seq) */
+ for(u32 j=0;j<6*48;j++)if(before[j]!=((u8*)out)[0x74+j])changed=1;
+ return changed;
+}
+__attribute__((used,retain)) int drum_seq_toolbar(void *model,void *out){return B(model,0x12c)==0x27&&U->magic==MAGIC&&supported((void*)U->view)?drum_seq_layout(out):0;}
 __attribute__((used,retain)) int seq_toolbar(void *model,void *out,int native_changed){
  native_changed=chord_toolbar(model,out,native_changed);
  native_changed|=piano_eu_toolbar(model,out);
- if(B(model,0x12c)==0x27 && U->magic==MAGIC && supported((void*)U->view)){
-  native_changed|=header_action_lit(out,0x1051,U->select_mode?select_on:select_label,U->select_mode!=0);
-  native_changed|=header_tab(out,0x1055,"Euclidean",seq_eu_mode((void*)U->view));
- }
- header_sync(out);
+ native_changed|=mod_toolbar(model,out); /* P8 MOD / MATRIX on synth pages */
+ if(B(model,0x12c)==0x27 && U->magic==MAGIC && supported((void*)U->view))native_changed|=drum_seq_layout(out);
+ native_changed|=header_remove_undo(out);header_sync(out);
  return native_changed;
 }
+
+int melodic_lock_registry(int limited){
+ if(!registry(0))return 0;
+ static const char *const choices[]={"Remove lock","Level","Pan","Filter","Resonance","Env 1 Decay","Env 1 Release","Delay Send","Reverb Send"};
+ if(limited)for(u32 i=0;i<2;i++){void *d=(void*)(W((void*)0x30031484u,0)+picker(i)*32);W(d,8)=(u32)choices;W(d,12)=9;}
+ return 1;
+}
+u32 melodic_lock_pack(u32 previous,u32 a,u32 b){u32 p=pack_locks(a,b);return p==0xffffffffu?p:conditional(p,lc_condition(previous));}
+
+void *step_current_view(void){return U->magic==MAGIC&&supported((void*)U->view)?(void*)U->view:0;}

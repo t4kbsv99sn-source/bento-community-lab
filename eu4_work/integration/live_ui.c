@@ -36,7 +36,7 @@ int live_edit(Euclid *e,u32 key,int value){
  if(key==4)vel=value<1?1:value>127?127:(u32)value;
  if(key==5)on=value>0;
  u32 serial=(r->serial+2)&~1u;if(!serial)serial=2;r->serial=serial|1;__asm__ volatile("dmb" ::: "memory");
- r->pads[e->pad]=eu_pack(n,k,rot,vel,on);r->pads[e->pad].velocity=eu_dynamics_gate(vel,eu_mode(p),eu_depth(p),eu_gate(p));if(!eu_mel(e))r->pads[e->pad].pattern|=p.pattern&(1u<<26);__asm__ volatile("dmb" ::: "memory");r->serial=serial;
+ r->pads[e->pad]=eu_pack(n,k,rot,vel,on);r->pads[e->pad].velocity=eu_dynamics_gate(vel,eu_mode(p),eu_depth(p),eu_gate(p));r->pads[e->pad].pattern|=p.pattern&(1u<<26);__asm__ volatile("dmb" ::: "memory");r->serial=serial;
  FN(0x0813130c,void(*)(void*))(MODEL);return 1;
 }
 static int read(void *p,const char *name,u32 *v){void *a=p?FN(0x08109c64,void*(*)(void*,const char*))(p,name):0;return a&&!FN(0x08109566,int(*)(void*,void*))(a,v);}
@@ -62,10 +62,12 @@ void live_load(void *node,void *object){
   EuRecord *r=record(b->pending,&b->pending_count,owner,row,1);if(r){r->pads[pad]=p;if(mel){r->reserved[0]|=EU_MELODIC;eu_record_set_pitch(r,pad,pitch);}}
  }
 }
+void melodic_register_tracks(void);
 void live_finish(void){
  EuBank *b=bank(0);if(!b)return;
  b->serial|=1;__asm__ volatile("dmb" ::: "memory");clear(b->records,sizeof(b->records));b->count=b->pending_count;
  for(u32 i=0;i<b->count;i++)b->records[i]=b->pending[i];clear(b->pending,sizeof(b->pending));b->pending_count=0;
+ melodic_register_tracks();
  b->epoch++;if(!b->epoch)b->epoch=1;__asm__ volatile("dmb" ::: "memory");b->serial=(b->serial+1)&~1u;if(!b->serial)b->serial=2;
 }
 
@@ -110,7 +112,7 @@ int live_generate(Euclid *e,u32 key,int value){
  e->scratch=next.scratch;e->status=status;if(status!=EU_OK&&status!=EU_SAME)return 0;
  u32 serial=(r->serial+2)&~1u;if(!serial)serial=2;r->serial=serial|1;__asm__ volatile("dmb" ::: "memory");
  r->pads[e->pad]=eu_pack(next.steps,next.hits,next.rotate,next.velocity,1);r->pads[e->pad].pattern|=1u<<26;r->pads[e->pad].velocity=eu_dynamics_gate(next.velocity,eu_mode(p),eu_depth(p),eu_mel(e)?eu_mel_gate(e):eu_gate(p));
- if(eu_mel(e)){r->reserved[0]|=EU_MELODIC;eu_record_set_pitch(r,e->pad,eu_mel_pitch(e));}
+ if(eu_mel(e)){r->reserved[0]=(r->reserved[0]&~0xf00u)|EU_MELODIC|(((e->preview>>20)&15u)<<8);eu_record_set_pitch(r,e->pad,eu_mel_pitch(e));}
  __asm__ volatile("dmb" ::: "memory");r->serial=serial;FN(0x0813130c,void(*)(void*))(MODEL);return 1;
 }
 
@@ -131,7 +133,7 @@ int live_pitch_owner(Euclid *e,u32 pitch,u32 except){
 int live_assign_pitch(Euclid *e,u32 pitch){
  EuRecord *r=selected(e,1);if(!r||pitch>127)return 0;EuPad p=live_value(e);
  u32 serial=(r->serial+2u)&~1u;if(!serial)serial=2;r->serial=serial|1;__asm__ volatile("dmb" ::: "memory");
- r->reserved[0]|=EU_MELODIC;eu_record_set_pitch(r,e->pad,pitch);r->pads[e->pad]=p;
+ r->reserved[0]=(r->reserved[0]&~0xf00u)|EU_MELODIC|(((e->preview>>20)&15u)<<8);eu_record_set_pitch(r,e->pad,pitch);r->pads[e->pad]=p;
  __asm__ volatile("dmb" ::: "memory");r->serial=serial;FN(0x0813130c,void(*)(void*))(MODEL);return 1;
 }
 int live_set_gate(Euclid *e,u32 gate){
@@ -149,6 +151,9 @@ __attribute__((used,retain)) int chord_audition_publish(int active,const u8 *cou
  if(active)for(u32 pc=0;pc<12;pc++){u32 n=count[pc];m->count[pc]=(u8)(n>CA_VOICES?CA_VOICES:n);for(u32 i=0;i<CA_VOICES;i++)m->off[pc][i]=i<n?off[pc*CA_VOICES+i]:0;}
  __asm__ volatile("dmb" ::: "memory");m->serial=s+1u;return 1;
 }
+u32 chord_mail_active(void){EuBank *b=bank(0);if(!b)return 0;volatile ChordMail *m=&b->chord_mail;return m->active&&!(m->serial&1u);}
+u32 chord_pub_serial(void){EuBank *b=bank(0);return b?((volatile ChordPub*)&b->chord_pub)->serial:0;}
+u32 chord_mail_serial(void){EuBank *b=bank(0);return b?((volatile ChordMail*)&b->chord_mail)->serial:0;}
 __attribute__((used,retain)) int chord_pad_pitch(u32 pad){
  EuBank *b=bank(0);if(!b||pad>=16)return -1;u8 v=((volatile ChordPub*)&b->chord_pub)->pitch[pad];return v&0x80u?(int)(v&127u):-1;
 }
@@ -182,3 +187,26 @@ __attribute__((used,retain)) u32 live_record_check(void){
 /* CH9: chord pads currently held (M7-published); recorded chords are only
    reshaped to the Rhythm once every chord pad is up. */
 __attribute__((used,retain)) u32 chord_pads_held(void){EuBank *b=bank(0);return b?((volatile ChordPub*)&b->chord_pub)->held:0;}
+
+#include "melodic_lock_shared.h"
+#include "melodic_send_shared.h"
+/* A separate checked allocation: no EuBank ABI or fixed RAM boundary changes. */
+void mel_audio_prepare(u32 owner){
+ EuBank *b=bank(1);if(!b||!owner)return;
+ if(!b->reserved[0]){
+  u32 p=W((void*)0x3000004cu,0),end=W((void*)0x30000048u,0),n=sizeof(MelAudio)+sizeof(MelSends);
+  if(!eu_memory(p,n)||end<p||end-p<n+32)return;
+  if(FN(0x08104c08,u32(*)(u32))(n)!=p)return;clear((void*)p,n);
+  ((MelAudio*)p)->sends=p+sizeof(MelAudio);
+  __asm__ volatile("dmb" ::: "memory");b->reserved[0]=p;
+ }
+ MelAudio *s=(MelAudio*)b->reserved[0];for(u32 i=0;i<8;i++)if(s->owners[i]==owner)return;
+ s->serial|=1;__asm__ volatile("dmb" ::: "memory");s->owners[s->next++&7]=owner;
+ __asm__ volatile("dmb" ::: "memory");s->serial=(s->serial+1)&~1u;if(!s->serial)s->serial=2;
+}
+
+/* P18: keep the published Step Len current (project load, Step Len changes). */
+int live_mel_unit(Euclid *e){
+ EuRecord *r=selected(e,0);if(!r||!eu_record_melodic(r))return 0;u32 want=(r->reserved[0]&~0xf00u)|(((e->preview>>20)&15u)<<8);if(r->reserved[0]==want)return 0;
+ u32 serial=(r->serial+2u)&~1u;if(!serial)serial=2;r->serial=serial|1;__asm__ volatile("dmb" ::: "memory");r->reserved[0]=want;__asm__ volatile("dmb" ::: "memory");r->serial=serial;return 1;
+}
